@@ -1,0 +1,48 @@
+# Shared Lychee link checker config for Solo docs sites
+# https://lychee.cli.rs/guides/config/
+
+exclude = [
+  "#.*",
+  ".*apple-touch-icon.*",
+  ".*favicon.*",
+  ".*site\\.webmanifest.*",
+  ".*style\\.min\\..*",
+  # CI build paths (Hugo sometimes embeds workspace paths in asset URLs)
+  "https?://[^/]+/home/runner/",
+  # Example/placeholder URLs
+  "https?://localhost.*",
+  "https?://example\\.com.*",
+  "https?://console.mistral.ai/",
+  "https?://aistudio.google.com/app/apikey",
+  "https?://istiod.istio-system.svc:15012",
+  "https?://slack.solo.io/",
+  # Example config values (not real URLs)
+  "https?://thanos-querier\\.openshift-monitoring\\.svc[^/]*",
+  # Open Source Attribution: Go module URLs (pkg.go.dev), not HTTP docs
+  "https?://k8s\\.io/",
+  "https?://istio\\.io/(api|client-go|istio)",
+  # Istio docs and release index (valid but often timeout or rate-limit in CI)
+  "https?://istio\\.io/latest/news/releases/?$",
+  # Gloo Mesh (OSS) version switcher links to Gloo Mesh Enterprise docs; expected cross-product links
+  "https?://docs\\.solo\\.io/gloo-mesh-enterprise/",
+  ".*gloo-mesh-enterprise/.*"
+]
+
+exclude_path = [
+  ".*categories/index.html",
+  ".*tags/index.html",
+]
+
+# Exclude all private IPs (localhost, 127.0.0.1, etc.)
+exclude_all_private = true
+
+# Accepted HTTP status codes (3xx not included - redirects will be reported)
+accept = ["100..=103", "200..=299", "403"]
+
+include_fragments = true
+
+verbose = "debug"
+
+no_progress = true
+
+timeout = 30
