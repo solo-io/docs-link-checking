@@ -10,7 +10,7 @@ ISSUE_LINE="${ISSUE_LINE:-}"
 PAYLOAD=$(jq -n \
   --arg channel  "${SLACK_CHANNEL}" \
   --arg text     "Link check (${PRODUCT_NAME}): ${ERRORS} errors, ${REDIRECTS} redirects" \
-  --arg mrkdwn   "${ICON} <https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}|${PRODUCT_NAME} broken links> | Errors: ${ERRORS} | Redirects: ${REDIRECTS}\n${ISSUE_LINE}" \
+  --arg mrkdwn   "${ICON} <https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}|${PRODUCT_NAME} broken links> | Errors: ${ERRORS} | Redirects: ${REDIRECTS}"$'\n'"${ISSUE_LINE}" \
   '{
     channel: $channel,
     text: $text,
