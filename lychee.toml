@@ -12,6 +12,7 @@ exclude = [
 
   # Example/placeholder URLs
   ".*example\\.(com|org)",
+  ".*another\\.(com|org)",
   "https?://example\\.com.*",
   "https?://localhost.*",
 
