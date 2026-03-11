@@ -2,31 +2,61 @@
 # https://lychee.cli.rs/guides/config/
 
 exclude = [
+  # Static assets
   "#.*",
   ".*apple-touch-icon.*",
   ".*favicon.*",
+  ".*\\.json",
   ".*site\\.webmanifest.*",
   ".*style\\.min\\..*",
-  # CI build paths (Hugo sometimes embeds workspace paths in asset URLs)
-  "https?://[^/]+/home/runner/",
+
   # Example/placeholder URLs
-  "https?://localhost.*",
+  ".*example\\.(com|org)",
   "https?://example\\.com.*",
-  "https?://console.mistral.ai/",
-  "https?://aistudio.google.com/app/apikey",
-  "https?://istiod.istio-system.svc:15012",
-  "https?://slack.solo.io/",
+  "https?://localhost.*",
+
+  # CI build paths (Hugo sometimes embeds workspace paths in asset URLs)
+  # Only excludes http(s) URLs — file:// URLs are lychee's local link resolution and should be checked
+  "https?://[^/]+/home/runner/",
+
+  # Internal ports commonly used in docs examples (Vault, Envoy admin, etc.)
+  ".*:8200.*",
+  ".*:9080.*",
+
+  # Internal/private hostnames
+  ".*127\\..*",
+  ".*cluster\\.local.*",
+  ".*prometheus-server.*",
+
   # Example config values (not real URLs)
+  "https?://istiod.istio-system.svc:15012",
   "https?://thanos-querier\\.openshift-monitoring\\.svc[^/]*",
+
+  # External services that block or rate-limit link checkers
+  ".*app\\.excalidraw.*",
+  ".*management\\.azure\\.com.*",
+  ".*storage\\.googleapis.*",
+  ".*twitter\\.com/soloio_inc.*",
+  "https?://aistudio.google.com/app/apikey",
+  "https?://console.mistral.ai/",
+  "https?://slack.solo.io/",
+
   # Open Source Attribution: Go module URLs (pkg.go.dev), not HTTP docs
-  "https?://k8s\\.io/",
   "https?://istio\\.io/(api|client-go|istio)",
-  # Istio docs and release index (valid but often timeout or rate-limit in CI)
+  "https?://k8s\\.io/",
+
+  # Istio release index (valid but often timeouts or rate-limits in CI)
   "https?://istio\\.io/latest/news/releases/?$",
+
   # Gloo Mesh (OSS) version switcher links to Gloo Mesh Enterprise docs; expected cross-product links
+  ".*gloo-mesh-enterprise/.*",
   "https?://docs\\.solo\\.io/gloo-mesh-enterprise/",
-  ".*gloo-mesh-enterprise/.*"
+
+  # Specific URLs excluded by content team
+  ".*articles/4414409064596.*",
 ]
+
+
 
 exclude_path = [
   ".*categories/index.html",
