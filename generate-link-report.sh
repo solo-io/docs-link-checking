@@ -150,7 +150,7 @@ if [ "${REDIRECTS:-0}" -gt 0 ]; then
     REDIRECT_URLS=$(echo "$REDIRECT_ENTRIES" | cut -f1 | sort -u -V -r)
     while IFS= read -r original; do
       [ -z "$original" ] && continue
-      final=$(echo "$REDIRECT_ENTRIES" | awk -F'\t' -v u="$original" '$1==u { print $2; exit }')
+      final=$(echo "$REDIRECT_ENTRIES" | awk -F'\t' -v u="$original" 'BEGIN{f=0} $1==u && !f { print $2; f=1 }')
       sources=$(echo "$REDIRECT_ENTRIES" | awk -F'\t' -v u="$original" '$1==u { print $3 }' | sort -u)
       source_count=$(echo "$sources" | grep -c . || true)
       if [ -n "$final" ] && [ "$original" != "$final" ]; then
