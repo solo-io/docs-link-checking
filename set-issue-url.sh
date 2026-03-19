@@ -15,6 +15,8 @@ if [ -n "${ISSUE_NUMBER:-}" ]; then
 
   # Add to project 24 and set Product field if PRODUCT is set
   if [ -n "${PRODUCT:-}" ]; then
+    # GitHub Projects V2 requires the OAuth 'project' scope; use GH_PROJECT_TOKEN if provided
+    [ -n "${GH_PROJECT_TOKEN:-}" ] && export GH_TOKEN="$GH_PROJECT_TOKEN"
     PROJECT_ORG="solo-io"
     PROJECT_NUMBER=24
 
