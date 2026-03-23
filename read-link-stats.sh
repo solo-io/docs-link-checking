@@ -25,7 +25,7 @@ if [ "${REDIRECTS}" = "null" ] || [ -z "${REDIRECTS}" ]; then REDIRECTS=0; fi
 
 if [ "${ERRORS}" -gt 5 ]; then
   ICON=":red_circle:"
-elif [ "${ERRORS}" -eq 0 ] && [ "${REDIRECTS}" -ge 10 ]; then
+elif [ "${ERRORS}" -le 5 ]; then
   ICON=":large_yellow_circle:"
 else
   ICON=":large_green_circle:"
