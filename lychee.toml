@@ -42,6 +42,7 @@ exclude = [
   "https?://console.mistral.ai/",
   "https?://slack.solo.io/",
   "https://www.linkedin.com/company/agent-gateway",
+  "https://www.linkedin.com/company/kagent/",
 
   # Open Source Attribution: Go module URLs (pkg.go.dev), not HTTP docs
   "https?://istio\\.io/(api|client-go|istio)",
