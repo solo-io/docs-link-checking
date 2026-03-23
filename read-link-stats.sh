@@ -23,9 +23,9 @@ fi
 if [ "${ERRORS}" = "null" ] || [ -z "${ERRORS}" ]; then ERRORS=0; fi
 if [ "${REDIRECTS}" = "null" ] || [ -z "${REDIRECTS}" ]; then REDIRECTS=0; fi
 
-if [ "${ERRORS}" -gt 5 ]; then
+if [ "${ERRORS}" -gt 10 ]; then
   ICON=":red_circle:"
-elif [ "${ERRORS}" -le 5 ]; then
+elif [ "${ERRORS}" -le 10 ]; then
   ICON=":large_yellow_circle:"
 else
   ICON=":large_green_circle:"
