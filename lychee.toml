@@ -31,6 +31,7 @@ exclude = [
 
   # Example config values (not real URLs)
   "https?://istiod.istio-system.svc:15012",
+  "https?://proxy.kagent.svc.cluster.local:8080",
   "https?://thanos-querier\\.openshift-monitoring\\.svc[^/]*",
 
   # External services that block or rate-limit link checkers
