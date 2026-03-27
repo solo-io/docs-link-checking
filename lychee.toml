@@ -52,9 +52,9 @@ exclude = [
   # Istio release index (valid but often timeouts or rate-limits in CI)
   "https?://istio\\.io/latest/news/releases/?$",
 
-  # Gloo Mesh (OSS) version switcher links to Gloo Mesh Enterprise docs; expected cross-product links
-  ".*gloo-mesh-enterprise/.*",
-  "https?://docs\\.solo\\.io/gloo-mesh-enterprise/",
+  # Gloo Mesh (OSS) version switcher links to Gloo Mesh Enterprise docs; expected cross-product links.
+  # Scoped to the OSS product path so the remap can still resolve internal GME links to local files.
+  "https?://docs\\.solo\\.io/gloo-mesh/.*gloo-mesh-enterprise/",
 
   # Specific URLs excluded by content team
   ".*articles/4414409064596.*",
