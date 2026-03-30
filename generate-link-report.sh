@@ -131,17 +131,40 @@ $RAW_ERRORS broken link(s) found. (URL list not in expected JSON shape. Top-leve
   fi
 fi
 
-# Summary uses unique error count so it matches the Errors list
-SUMMARY="## Summary
+# Returns 0 (skip) if the redirect is caused by a known ignorable server-side pattern.
+skip_redirect() {
+  local original="$1" final="$2"
+  local orig_lower final_lower
+  orig_lower=$(printf '%s' "$original" | tr '[:upper:]' '[:lower:]')
+  final_lower=$(printf '%s' "$final" | tr '[:upper:]' '[:lower:]')
 
-| | Count |
-|-|------:|
-| Errors | $UNIQUE_ERRORS |
-| Redirects | $REDIRECTS |
-"
+  # Only difference is a trailing slash
+  [ "${original%/}" = "${final%/}" ] && return 0
+
+  # Only differences are in the query string (everything after ?)
+  local orig_base final_base
+  orig_base="${original%%\?*}"
+  final_base="${final%%\?*}"
+  [[ "$final" == *"?"* ]] && [ "$orig_base" = "$final_base" ] && return 0
+
+  # Locale redirect: en_us or en-us in redirect but not original
+  [[ "$final_lower" == *"en_us"* ]] && [[ "$orig_lower" != *"en_us"* ]] && return 0
+  [[ "$final_lower" == *"en-us"* ]] && [[ "$orig_lower" != *"en-us"* ]] && return 0
+
+  # Auth redirect: login or signin in redirect but not original
+  [[ "$final_lower" == *"login"* ]] && [[ "$orig_lower" != *"login"* ]] && return 0
+  [[ "$final_lower" == *"signin"* ]] && [[ "$orig_lower" != *"signin"* ]] && return 0
+
+  # Home redirect: /home in redirect but not original
+  [[ "$final_lower" == *"/home"* ]] && [[ "$orig_lower" != *"/home"* ]] && return 0
+
+  return 1
+}
 
 # Redirects: Lychee uses .redirect_map (key=source path, value=array of { url, status: { redirects: { redirects: [{ url, code }, ...] } } })
+# Process redirects before building the summary so the displayed count matches.
 REDIRECT_SECTION=""
+DISPLAYED_REDIRECTS=0
 if [ "${REDIRECTS:-0}" -gt 0 ]; then
   # Include source page (redirect_map key) as third field so we can show "Found on"
   REDIRECT_ENTRIES=$(jq -r '
@@ -162,6 +185,11 @@ if [ "${REDIRECTS:-0}" -gt 0 ]; then
     while IFS= read -r original; do
       [ -z "$original" ] && continue
       final=$(echo "$REDIRECT_ENTRIES" | awk -F'\t' -v u="$original" 'BEGIN{f=0} $1==u && !f { print $2; f=1 }')
+
+      # Skip ignorable server-side redirect patterns
+      skip_redirect "$original" "$final" && continue
+
+      DISPLAYED_REDIRECTS=$((DISPLAYED_REDIRECTS + 1))
       sources=$(echo "$REDIRECT_ENTRIES" | awk -F'\t' -v u="$original" '$1==u { print $3 }' | sort -u)
       source_count=$(echo "$sources" | grep -c . || true)
       if [ -n "$final" ] && [ "$original" != "$final" ]; then
@@ -186,13 +214,24 @@ if [ "${REDIRECTS:-0}" -gt 0 ]; then
       [ -n "$found_on" ] && REDIRECT_SECTION="${REDIRECT_SECTION}${found_on}
 "
     done <<< "$REDIRECT_URLS"
+    [ "$DISPLAYED_REDIRECTS" -eq 0 ] && REDIRECT_SECTION=""
   else
+    DISPLAYED_REDIRECTS="$REDIRECTS"
     REDIRECT_SECTION="## Redirects
 
 $REDIRECTS link(s) redirect. (Details not in JSON; check Lychee output.)
 "
   fi
 fi
+
+# Summary uses unique error count and displayed redirect count so both match the lists below
+SUMMARY="## Link checking summary for $PRODUCT_NAME
+
+| | Count |
+|-|------:|
+| Errors | $UNIQUE_ERRORS |
+| Redirects | $DISPLAYED_REDIRECTS |
+"
 
 REPORT="${SUMMARY}
 ${FAIL_SECTION}
