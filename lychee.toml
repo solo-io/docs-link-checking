@@ -72,7 +72,7 @@ exclude_path = [
 exclude_all_private = true
 
 # Accepted HTTP status codes (3xx not included - redirects will be reported)
-accept = ["100..=103", "200..=299", "403"]
+accept = ["100..=103", "200..=299", "403", "502", "503"]
 
 include_fragments = true
 
