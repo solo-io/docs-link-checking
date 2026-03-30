@@ -3,9 +3,10 @@
 # Puts newest versions first (e.g. 2.12 before 2.9) so the issue body stays under
 # GitHub's limit while showing the most relevant links.
 #
-# Optional 3rd arg: PUBLIC_DIR (e.g. workspace/public). When set, broken file:// URLs
-# that exist under a different version (e.g. path exists in 2.9.x but not main) are
-# excluded from the report, since the link is valid in at least one version.
+# Optional 3rd arg: PUBLIC_DIR (e.g. workspace/public). When set, broken file:// links
+# where the source page and the broken URL refer to the same page in different versions
+# (e.g. version-switcher links) are excluded from the report. Broken links to a different
+# page, or within the same version, are always reported.
 set -euo pipefail
 
 JSON_FILE="${1:?Usage: generate-link-report.sh <lychee.json> [output.md] [public_dir]}"
@@ -43,40 +44,50 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
     # Get unique URLs and apply version-drift filter (same as before)
     FAIL_URLS=$(echo "$FAIL_ENTRIES" | cut -f1 | sort -u -V -r)
     if [ -n "$PUBLIC_DIR" ] && [ -d "$PUBLIC_DIR" ]; then
-      FILTERED=""
-      while IFS= read -r url; do
-        [ -z "$url" ] && continue
-        path="$url"
+      FILTERED_ENTRIES=""
+      while IFS= read -r entry; do
+        [ -z "$entry" ] && continue
+        url=$(printf '%s' "$entry" | cut -f1)
+        src=$(printf '%s' "$entry" | cut -f2-)
+
+        # Normalize file:// URLs to public/... paths
+        url_path="$url"
         if [[ "$url" == file:///* ]]; then
-          rest="${url#file://}"
-          [[ "$rest" == *"/public/"* ]] && path="public/${rest#*/public/}" || path="${rest#/}"
+          _rest="${url#file://}"
+          [[ "$_rest" == *"/public/"* ]] && url_path="public/${_rest#*/public/}" || url_path="${_rest#/}"
         fi
-        if [[ "$path" == public/*/*/* ]]; then
-          IFS='/' read -ra parts <<< "$path"
-          product="${parts[1]:-}"
-          version="${parts[2]:-}"
-          rest="${path#public/$product/$version/}"
-          exclude=0
-          if [ -n "$rest" ] && [ -d "$PUBLIC_DIR/$product" ]; then
-            for other in "$PUBLIC_DIR/$product"/*/; do
-              [ -d "$other" ] || continue
-              otherver=$(basename "$other")
-              [ "$otherver" = "$version" ] && continue
-              target="$PUBLIC_DIR/$product/$otherver/$rest"
-              if [ -f "$target" ] || [ -f "$target/index.html" ] || [ -d "$target" ]; then
-                exclude=1
-                break
-              fi
-            done
+        src_path="$src"
+        if [[ "$src" == file:///* ]]; then
+          _rest="${src#file://}"
+          [[ "$_rest" == *"/public/"* ]] && src_path="public/${_rest#*/public/}" || src_path="${_rest#/}"
+        fi
+
+        exclude=0
+        # Suppress only cross-version links where the broken URL points to the same page
+        # as its source but in a different version (e.g. version-switcher links).
+        # Links to a different page, or to the same version, are always reported.
+        if [[ "$url_path" == public/*/*/* ]] && [[ "$src_path" == public/*/*/* ]]; then
+          url_product=$(printf '%s' "$url_path" | cut -d/ -f2)
+          url_version=$(printf '%s' "$url_path" | cut -d/ -f3)
+          url_rel="${url_path#public/$url_product/$url_version/}"
+
+          src_product=$(printf '%s' "$src_path" | cut -d/ -f2)
+          src_version=$(printf '%s' "$src_path" | cut -d/ -f3)
+          src_rel="${src_path#public/$src_product/$src_version/}"
+          src_rel_norm="${src_rel%/index.html}"
+
+          if [ -n "$url_rel" ] && [ -n "$src_rel_norm" ] \
+             && [ "$url_product" = "$src_product" ] \
+             && [ "$url_version" != "$src_version" ] \
+             && [ "$url_rel" = "$src_rel_norm" ]; then
+            exclude=1
           fi
-          [ "$exclude" -eq 1 ] && continue
         fi
-        FILTERED="${FILTERED}${url}"$'\n'
-      done <<< "$FAIL_URLS"
-      FAIL_URLS="$FILTERED"
-      # Keep only (url, source) entries whose URL was not filtered out
-      KEPT=$(echo "$FILTERED" | sort -u)
-      FAIL_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' 'NR==FNR { kept[$0]=1; next } $1 in kept' <(echo "$KEPT") -)
+
+        [ "$exclude" -eq 0 ] && FILTERED_ENTRIES="${FILTERED_ENTRIES}${entry}"$'\n'
+      done <<< "$FAIL_ENTRIES"
+      FAIL_ENTRIES="$FILTERED_ENTRIES"
+      FAIL_URLS=$(echo "$FAIL_ENTRIES" | cut -f1 | sort -u -V -r)
     fi
     UNIQUE_ERRORS=$(echo "$FAIL_URLS" | grep -c . || true)
     FAIL_SECTION="## Errors (newest versions first)
