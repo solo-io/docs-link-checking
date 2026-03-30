@@ -8,9 +8,20 @@ if [ -n "${ISSUE_NUMBER:-}" ]; then
   echo "issue_url=https://github.com/${REPOSITORY}/issues/${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
   echo "issue_line=Issue: <https://github.com/${REPOSITORY}/issues/${ISSUE_NUMBER}|View issue>" >> "$GITHUB_OUTPUT"
 
-  # Apply labels if provided
+  # Apply labels if provided. Retry up to 3 times to handle GitHub GraphQL
+  # eventual-consistency lag after issue creation via the REST API.
   if [ -n "${LABELS:-}" ]; then
-    gh issue edit "${ISSUE_NUMBER}" --repo "${REPOSITORY}" --add-label "${LABELS}"
+    for attempt in 1 2 3; do
+      if gh issue edit "${ISSUE_NUMBER}" --repo "${REPOSITORY}" --add-label "${LABELS}"; then
+        break
+      fi
+      if [ "$attempt" -lt 3 ]; then
+        echo "Label application failed (attempt ${attempt}/3); retrying in 5s..."
+        sleep 5
+      else
+        echo "Warning: could not add labels to issue #${ISSUE_NUMBER} after 3 attempts."
+      fi
+    done
   fi
 
   # Add to project 24 and set Product field if PRODUCT is set
