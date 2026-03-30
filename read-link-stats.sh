@@ -23,12 +23,12 @@ fi
 if [ "${ERRORS}" = "null" ] || [ -z "${ERRORS}" ]; then ERRORS=0; fi
 if [ "${REDIRECTS}" = "null" ] || [ -z "${REDIRECTS}" ]; then REDIRECTS=0; fi
 
-if [ "${ERRORS}" -gt 10 ]; then
-  ICON=":red_circle:"
+if [ "${ERRORS}" -eq 0 ]; then
+  ICON=":large_green_circle:"
 elif [ "${ERRORS}" -le 10 ]; then
   ICON=":large_yellow_circle:"
 else
-  ICON=":large_green_circle:"
+  ICON=":red_circle:"
 fi
 
 echo "errors=${ERRORS}" >> "$GITHUB_OUTPUT"
