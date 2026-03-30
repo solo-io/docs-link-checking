@@ -26,7 +26,8 @@ exclude = [
 
   # Internal/private hostnames
   ".*127\\..*",
-  ".*cluster\\.local.*",
+  ".*\\.local[:/].*",
+  ".*\\.local$",
   ".*prometheus-server.*",
 
   # Example config values (not real URLs)
