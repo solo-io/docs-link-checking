@@ -3,7 +3,7 @@
 
 exclude = [
   # Static assets
-  "#.*",
+  "^#$",
   ".*apple-touch-icon.*",
   ".*favicon.*",
   ".*\\.json",
