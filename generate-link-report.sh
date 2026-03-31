@@ -22,33 +22,35 @@ fi
 REDIRECTS=$(jq -r '.redirects // (.redirect_map | length) // 0' "$JSON_FILE")
 if [ "$REDIRECTS" = "null" ]; then REDIRECTS=0; fi
 
-# Failed URLs: extract (url, source) from .error_map so we can show where each link was found
+# Failed URLs: extract (url, details, source) from .error_map so we can show where each
+# link was found and classify fragment warnings separately.
 FAIL_SECTION=""
+WARN_SECTION=""
 UNIQUE_ERRORS=0
+UNIQUE_WARNINGS=0
 RAW_ERRORS=$(jq -r '.errors // (.error_map | length) // 0' "$JSON_FILE")
 if [ "$RAW_ERRORS" = "null" ]; then RAW_ERRORS=0; fi
 if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
-  # Output "url\tsource" for every (source, url) pair (value can be object or array of objects)
+  # Output "url\tdetails\tsource" for every (source, url) pair
   FAIL_ENTRIES=$(jq -r '
     (.error_map // .fail_map // {} | to_entries[] |
       .key as $source |
       .value as $v |
-      if ($v | type) == "string" then "\($v)\t\($source)"
-      elif ($v | type) == "object" then "\($v.url // $v.uri // .key)\t\($source)"
-      elif ($v | type) == "array" then ($v[] | "\(.url // .uri // "")\t\($source)" | select(length > 0))
-      else "\(.key)\t\($source)"
+      if ($v | type) == "string" then "\($v)\t\t\($source)"
+      elif ($v | type) == "object" then "\($v.url // $v.uri // .key)\t\($v.details // "")\t\($source)"
+      elif ($v | type) == "array" then ($v[] | "\(.url // .uri // "")\t\(.details // "")\t\($source)" | select(length > 0))
+      else "\(.key)\t\t\($source)"
       end
     ) | select(split("\t")[0] | length > 0)
   ' "$JSON_FILE" 2>/dev/null || true)
   if [ -n "$FAIL_ENTRIES" ]; then
-    # Get unique URLs and apply version-drift filter (same as before)
-    FAIL_URLS=$(echo "$FAIL_ENTRIES" | cut -f1 | sort -u -V -r)
+    # Apply version-drift filter (same as before)
     if [ -n "$PUBLIC_DIR" ] && [ -d "$PUBLIC_DIR" ]; then
       FILTERED_ENTRIES=""
       while IFS= read -r entry; do
         [ -z "$entry" ] && continue
         url=$(printf '%s' "$entry" | cut -f1)
-        src=$(printf '%s' "$entry" | cut -f2-)
+        src=$(printf '%s' "$entry" | cut -f3-)
 
         # Normalize file:// URLs to public/... paths
         url_path="$url"
@@ -87,42 +89,84 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
         [ "$exclude" -eq 0 ] && FILTERED_ENTRIES="${FILTERED_ENTRIES}${entry}"$'\n'
       done <<< "$FAIL_ENTRIES"
       FAIL_ENTRIES="$FILTERED_ENTRIES"
-      FAIL_URLS=$(echo "$FAIL_ENTRIES" | cut -f1 | sort -u -V -r)
     fi
-    UNIQUE_ERRORS=$(echo "$FAIL_URLS" | grep -c . || true)
-    FAIL_SECTION="## Errors (newest versions first)
+
+    # Split into errors (details has no "fragment") and warnings (details mentions "fragment")
+    ERROR_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' 'tolower($2) !~ /fragment/' || true)
+    WARN_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' 'tolower($2) ~ /fragment/' || true)
+
+    # --- Build Errors section ---
+    ERROR_URLS=$(echo "$ERROR_ENTRIES" | cut -f1 | sort -u -V -r | grep . || true)
+    UNIQUE_ERRORS=$(echo "$ERROR_URLS" | grep -c . || true)
+    if [ -n "$ERROR_ENTRIES" ] && [ "${UNIQUE_ERRORS:-0}" -gt 0 ]; then
+      FAIL_SECTION="## Errors (newest versions first)
 
 "
-    # Group by URL and collect sources; show each URL with "Found on: ..." (cap at 5 sources, then "and N more")
-    MAX_SOURCES=5
-    while IFS= read -r url; do
-      [ -z "$url" ] && continue
-      sources=$(echo "$FAIL_ENTRIES" | awk -F'\t' -v u="$url" '$1==u { print $2 }' | sort -u)
-      source_count=$(echo "$sources" | grep -c . || true)
-      # Normalize URL for display
-      display_url="$url"
-      if [[ "$url" == file:///* ]]; then
-        rest="${url#file://}"
-        [[ "$rest" == *"/public/"* ]] && display_url="public/${rest#*/public/}" || display_url="${rest#/}"
-      fi
-      FAIL_SECTION="${FAIL_SECTION}- [ ] \`${display_url}\`
-"
-      # Normalize source paths for display (portable)
-      first=1
-      n=0
-      found_on=""
-      while IFS= read -r src; do
-        [ -z "$src" ] && continue
-        [[ "$src" == file:///* ]] && src="${src#file://}" && [[ "$src" == *"/public/"* ]] && src="public/${src#*/public/}"
-        n=$((n+1))
-        if [ "$n" -le "$MAX_SOURCES" ]; then
-          [ "$first" -eq 1 ] && found_on="  Found on: \`$src\`" && first=0 || found_on="$found_on, \`$src\`"
+      MAX_SOURCES=5
+      while IFS= read -r url; do
+        [ -z "$url" ] && continue
+        sources=$(echo "$ERROR_ENTRIES" | awk -F'\t' -v u="$url" '$1==u { print $3 }' | sort -u)
+        source_count=$(echo "$sources" | grep -c . || true)
+        display_url="$url"
+        if [[ "$url" == file:///* ]]; then
+          rest="${url#file://}"
+          [[ "$rest" == *"/public/"* ]] && display_url="public/${rest#*/public/}" || display_url="${rest#/}"
         fi
-      done <<< "$sources"
-      [ "$source_count" -gt "$MAX_SOURCES" ] && found_on="$found_on, and $((source_count - MAX_SOURCES)) more"
-      [ -n "$found_on" ] && FAIL_SECTION="${FAIL_SECTION}${found_on}
+        FAIL_SECTION="${FAIL_SECTION}- [ ] \`${display_url}\`
 "
-    done <<< "$FAIL_URLS"
+        first=1
+        n=0
+        found_on=""
+        while IFS= read -r src; do
+          [ -z "$src" ] && continue
+          [[ "$src" == file:///* ]] && src="${src#file://}" && [[ "$src" == *"/public/"* ]] && src="public/${src#*/public/}"
+          n=$((n+1))
+          if [ "$n" -le "$MAX_SOURCES" ]; then
+            [ "$first" -eq 1 ] && found_on="  Found on: \`$src\`" && first=0 || found_on="$found_on, \`$src\`"
+          fi
+        done <<< "$sources"
+        [ "$source_count" -gt "$MAX_SOURCES" ] && found_on="$found_on, and $((source_count - MAX_SOURCES)) more"
+        [ -n "$found_on" ] && FAIL_SECTION="${FAIL_SECTION}${found_on}
+"
+      done <<< "$ERROR_URLS"
+    fi
+
+    # --- Build Warnings section (fragment anchor errors) ---
+    WARN_URLS=$(echo "$WARN_ENTRIES" | cut -f1 | sort -u -V -r | grep . || true)
+    UNIQUE_WARNINGS=$(echo "$WARN_URLS" | grep -c . || true)
+    if [ -n "$WARN_ENTRIES" ] && [ "${UNIQUE_WARNINGS:-0}" -gt 0 ]; then
+      WARN_SECTION="## Warnings — missing anchors (newest versions first)
+
+"
+      MAX_SOURCES=5
+      while IFS= read -r url; do
+        [ -z "$url" ] && continue
+        sources=$(echo "$WARN_ENTRIES" | awk -F'\t' -v u="$url" '$1==u { print $3 }' | sort -u)
+        source_count=$(echo "$sources" | grep -c . || true)
+        display_url="$url"
+        if [[ "$url" == file:///* ]]; then
+          rest="${url#file://}"
+          [[ "$rest" == *"/public/"* ]] && display_url="public/${rest#*/public/}" || display_url="${rest#/}"
+        fi
+        WARN_SECTION="${WARN_SECTION}- [ ] \`${display_url}\`
+"
+        first=1
+        n=0
+        found_on=""
+        while IFS= read -r src; do
+          [ -z "$src" ] && continue
+          [[ "$src" == file:///* ]] && src="${src#file://}" && [[ "$src" == *"/public/"* ]] && src="public/${src#*/public/}"
+          n=$((n+1))
+          if [ "$n" -le "$MAX_SOURCES" ]; then
+            [ "$first" -eq 1 ] && found_on="  Found on: \`$src\`" && first=0 || found_on="$found_on, \`$src\`"
+          fi
+        done <<< "$sources"
+        [ "$source_count" -gt "$MAX_SOURCES" ] && found_on="$found_on, and $((source_count - MAX_SOURCES)) more"
+        [ -n "$found_on" ] && WARN_SECTION="${WARN_SECTION}${found_on}
+"
+      done <<< "$WARN_URLS"
+    fi
+
   else
     FAIL_SECTION="## Errors (newest versions first)
 
@@ -230,11 +274,13 @@ SUMMARY="## Link checking summary for $PRODUCT_NAME
 | | Count |
 |-|------:|
 | Errors | $UNIQUE_ERRORS |
+| Warnings (missing anchors) | $UNIQUE_WARNINGS |
 | Redirects | $DISPLAYED_REDIRECTS |
 "
 
 REPORT="${SUMMARY}
 ${FAIL_SECTION}
+${WARN_SECTION}
 ${REDIRECT_SECTION}"
 
 if [ -n "$OUTPUT_FILE" ]; then

@@ -5,11 +5,13 @@
 set -euo pipefail
 
 ERRORS=""
+WARNINGS=""
 REDIRECTS=""
 
 # Prefer generated markdown (reports unique errors so Slack matches the issue)
 if [ -f "${MD_FILE}" ]; then
   ERRORS=$(grep '| Errors |' "${MD_FILE}" | grep -oE '[0-9]+' | head -1)
+  WARNINGS=$(grep '| Warnings' "${MD_FILE}" | grep -oE '[0-9]+' | head -1)
   REDIRECTS=$(grep '| Redirects |' "${MD_FILE}" | grep -oE '[0-9]+' | head -1)
 fi
 
@@ -21,6 +23,7 @@ if [ -z "${ERRORS}" ] || [ -z "${REDIRECTS}" ]; then
 fi
 
 if [ "${ERRORS}" = "null" ] || [ -z "${ERRORS}" ]; then ERRORS=0; fi
+if [ "${WARNINGS}" = "null" ] || [ -z "${WARNINGS}" ]; then WARNINGS=0; fi
 if [ "${REDIRECTS}" = "null" ] || [ -z "${REDIRECTS}" ]; then REDIRECTS=0; fi
 
 if [ "${ERRORS}" -eq 0 ]; then
@@ -32,6 +35,7 @@ else
 fi
 
 echo "errors=${ERRORS}" >> "$GITHUB_OUTPUT"
+echo "warnings=${WARNINGS}" >> "$GITHUB_OUTPUT"
 echo "redirects=${REDIRECTS}" >> "$GITHUB_OUTPUT"
 echo "icon=${ICON}" >> "$GITHUB_OUTPUT"
 

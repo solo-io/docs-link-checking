@@ -7,12 +7,13 @@ set -euo pipefail
 
 ISSUE_LINE="${ISSUE_LINE:-}"
 
-BASE_LINE="${ICON} <https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}|${PRODUCT_NAME} broken links> | Errors: ${ERRORS} | Redirects: ${REDIRECTS}"
+WARNINGS="${WARNINGS:-0}"
+BASE_LINE="${ICON} <https://github.com/${REPOSITORY}/actions/runs/${RUN_ID}|${PRODUCT_NAME} broken links> | Errors: ${ERRORS} | Warnings: ${WARNINGS} | Redirects: ${REDIRECTS}"
 MRKDWN="${BASE_LINE}${ISSUE_LINE:+$'\n'${ISSUE_LINE}}"
 
 PAYLOAD=$(jq -n \
   --arg channel  "${SLACK_CHANNEL}" \
-  --arg text     "Link check (${PRODUCT_NAME}): ${ERRORS} errors, ${REDIRECTS} redirects" \
+  --arg text     "Link check (${PRODUCT_NAME}): ${ERRORS} errors, ${WARNINGS} warnings, ${REDIRECTS} redirects" \
   --arg mrkdwn   "${MRKDWN}" \
   '{
     channel: $channel,
