@@ -37,8 +37,8 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
       .key as $source |
       .value as $v |
       if ($v | type) == "string" then "\($v)\t\t\($source)"
-      elif ($v | type) == "object" then "\($v.url // $v.uri // .key)\t\($v.details // "")\t\($source)"
-      elif ($v | type) == "array" then ($v[] | "\(.url // .uri // "")\t\(.details // "")\t\($source)" | select(length > 0))
+      elif ($v | type) == "object" then "\($v.url // $v.uri // .key)\t\($v.status.details // $v.status.text // $v.details // "")\t\($source)"
+      elif ($v | type) == "array" then ($v[] | "\(.url // .uri // "")\t\(.status.details // .status.text // .details // "")\t\($source)" | select(length > 0))
       else "\(.key)\t\t\($source)"
       end
     ) | select(split("\t")[0] | length > 0)
