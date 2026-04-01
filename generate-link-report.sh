@@ -91,6 +91,10 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
       FAIL_ENTRIES="$FILTERED_ENTRIES"
     fi
 
+    # Drop false-positive fragment errors for GitHub line-range anchors (#L123 / #L123-L456).
+    # Lychee can't resolve these anchors but the links are valid.
+    FAIL_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' '!($1 ~ /#L[0-9]/ && tolower($2) ~ /fragment/)' || true)
+
     # Split into errors (details has no "fragment") and warnings (details mentions "fragment")
     ERROR_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' 'tolower($2) !~ /fragment/' || true)
     WARN_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' 'tolower($2) ~ /fragment/' || true)
