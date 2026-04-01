@@ -135,7 +135,7 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
     WARN_URLS=$(echo "$WARN_ENTRIES" | cut -f1 | sort -u -V -r | grep . || true)
     UNIQUE_WARNINGS=$(echo "$WARN_URLS" | grep -c . || true)
     if [ -n "$WARN_ENTRIES" ] && [ "${UNIQUE_WARNINGS:-0}" -gt 0 ]; then
-      WARN_SECTION="## Warnings — missing anchors (newest versions first)
+      WARN_SECTION="## Warnings — broken anchors (newest versions first)
 
 "
       MAX_SOURCES=5
@@ -274,7 +274,7 @@ SUMMARY="## Link checking summary for $PRODUCT_NAME
 | | Count |
 |-|------:|
 | Errors | $UNIQUE_ERRORS |
-| Warnings (missing anchors) | $UNIQUE_WARNINGS |
+| Warnings (broken anchors) | $UNIQUE_WARNINGS |
 | Redirects | $DISPLAYED_REDIRECTS |
 "
 
