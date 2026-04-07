@@ -7,11 +7,55 @@
 # where the source page and the broken URL refer to the same page in different versions
 # (e.g. version-switcher links) are excluded from the report. Broken links to a different
 # page, or within the same version, are always reported.
+#
+# Optional 4th arg: when set to "pr", the script diffs against origin/main to
+# find changed content/asset files and scopes results to only include:
+#   1. Broken links in files that were changed (source matches a changed file)
+#   2. Broken links to files that were changed (target matches a changed file)
+# Asset files are resolved to the content pages that reuse them via
+# find-asset-users.py (located next to this script).
 set -euo pipefail
 
-JSON_FILE="${1:?Usage: generate-link-report.sh <lychee.json> [output.md] [public_dir]}"
+JSON_FILE="${1:?Usage: generate-link-report.sh <lychee.json> [output.md] [public_dir] [pr]}"
 OUTPUT_FILE="${2:-}"
 PUBLIC_DIR="${3:-}"
+PR_MODE="${4:-}"
+
+# Build slug list from changed content files (if in PR mode).
+# Slugs are the path fragments that appear in public/ URLs:
+#   content/docs/foo/bar.md    -> docs/foo/bar/
+#   content/docs/foo/_index.md -> docs/foo/
+CHANGED_SLUGS=()
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -n "$PR_MODE" ]; then
+  # Get changed content and asset files relative to the base branch
+  PR_CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- content/ assets/ 2>/dev/null \
+    | sort -u || true)
+  # Resolve asset files to the content pages that reuse them
+  CHANGED_CONTENT_FILES=$(echo "$PR_CHANGED_FILES" \
+    | python3 "$SCRIPT_DIR/find-asset-users.py" --repo-root "$(git rev-parse --show-toplevel)" --content-only - 2>/dev/null || true)
+  while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    rel="${file#content/}"
+    if [[ "$rel" == */_index.md ]]; then
+      slug="${rel%/_index.md}/"
+    elif [[ "$rel" == *.md ]]; then
+      slug="${rel%.md}/"
+    else
+      continue
+    fi
+    CHANGED_SLUGS+=("$slug")
+  done <<< "$CHANGED_CONTENT_FILES"
+fi
+
+# Returns 0 (match) if the given path contains any changed-file slug.
+matches_changed_file() {
+  local path="$1"
+  for slug in "${CHANGED_SLUGS[@]}"; do
+    [[ "$path" == *"$slug"* ]] && return 0
+  done
+  return 1
+}
 
 if [ ! -f "$JSON_FILE" ]; then
   echo "JSON file not found: $JSON_FILE" >&2
@@ -87,6 +131,21 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
         fi
 
         [ "$exclude" -eq 0 ] && FILTERED_ENTRIES="${FILTERED_ENTRIES}${entry}"$'\n'
+      done <<< "$FAIL_ENTRIES"
+      FAIL_ENTRIES="$FILTERED_ENTRIES"
+    fi
+
+    # Scope to PR-changed files: keep entries where source or target matches a changed file
+    if [ ${#CHANGED_SLUGS[@]} -gt 0 ]; then
+      FILTERED_ENTRIES=""
+      while IFS= read -r entry; do
+        [ -z "$entry" ] && continue
+        url=$(printf '%s' "$entry" | cut -f1)
+        src=$(printf '%s' "$entry" | cut -f3-)
+        # Include if source (edited file has broken link) or target (link points to edited file) matches
+        if matches_changed_file "$src" || matches_changed_file "$url"; then
+          FILTERED_ENTRIES="${FILTERED_ENTRIES}${entry}"$'\n'
+        fi
       done <<< "$FAIL_ENTRIES"
       FAIL_ENTRIES="$FILTERED_ENTRIES"
     fi
@@ -224,6 +283,20 @@ if [ "${REDIRECTS:-0}" -gt 0 ]; then
       "\($original)\t\($final)\t\($source)"
     ) | select(length > 0)
   ' "$JSON_FILE" 2>/dev/null || true)
+  # Scope redirects to PR-changed files
+  if [ -n "$REDIRECT_ENTRIES" ] && [ ${#CHANGED_SLUGS[@]} -gt 0 ]; then
+    FILTERED_ENTRIES=""
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      url=$(printf '%s' "$entry" | cut -f1)
+      src=$(printf '%s' "$entry" | cut -f3-)
+      if matches_changed_file "$src" || matches_changed_file "$url"; then
+        FILTERED_ENTRIES="${FILTERED_ENTRIES}${entry}"$'\n'
+      fi
+    done <<< "$REDIRECT_ENTRIES"
+    REDIRECT_ENTRIES="$FILTERED_ENTRIES"
+  fi
+
   if [ -n "$REDIRECT_ENTRIES" ]; then
     REDIRECT_SECTION="## Redirects (newest versions first)
 
