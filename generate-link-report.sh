@@ -37,6 +37,9 @@ if [ -n "$PR_MODE" ]; then
   while IFS= read -r file; do
     [ -z "$file" ] && continue
     rel="${file#content/}"
+    # Hugo drops the default language prefix (e.g. en/) from output paths,
+    # so strip it to match public/ paths.
+    rel="${rel#en/}"
     if [[ "$rel" == */_index.md ]]; then
       slug="${rel%/_index.md}/"
     elif [[ "$rel" == *.md ]]; then
