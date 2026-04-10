@@ -59,11 +59,13 @@ exclude = [
   # Specific URLs excluded by content team
   ".*articles/4414409064596.*",
 
-  # Bare product name from Mermaid diagrams rendered as raw text in HTML
-  "^agentgateway$",
-  "^agentregistry$",
-  "^gateway$",
-  "^kgateway$",
+  # Theme logo link (relLangURL "") produces a relative href like "agentgateway/"
+  # which lychee resolves to a path ending in the bare product name. This also
+  # catches Mermaid diagram text that lychee misinterprets as links.
+  "agentgateway/?$",
+  "agentregistry/?$",
+  "gateway/?$",
+  "kgateway/?$",
 ]
 
 
