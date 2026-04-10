@@ -157,9 +157,23 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
     # Lychee can't resolve these anchors but the links are valid.
     FAIL_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' '!($1 ~ /#L[0-9]/ && tolower($2) ~ /fragment/)' || true)
 
-    # Split into errors (details has no "fragment") and warnings (details mentions "fragment")
-    ERROR_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' 'tolower($2) !~ /fragment/' || true)
-    WARN_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' 'tolower($2) ~ /fragment/' || true)
+    # Split into errors and warnings. A URL goes to warnings if ANY entry for
+    # that URL mentions "fragment" in its details (broken anchor), so the same
+    # URL doesn't appear in both sections.
+    FRAGMENT_URLS=$(echo "$FAIL_ENTRIES" | awk -F'\t' 'tolower($2) ~ /fragment/ { print $1 }' | sort -u || true)
+    if [ -n "$FRAGMENT_URLS" ]; then
+      ERROR_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' -v frag="$FRAGMENT_URLS" '
+        BEGIN { split(frag, a, "\n"); for (i in a) urls[a[i]]=1 }
+        !($1 in urls)
+      ' || true)
+      WARN_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' -v frag="$FRAGMENT_URLS" '
+        BEGIN { split(frag, a, "\n"); for (i in a) urls[a[i]]=1 }
+        ($1 in urls)
+      ' || true)
+    else
+      ERROR_ENTRIES="$FAIL_ENTRIES"
+      WARN_ENTRIES=""
+    fi
 
     # --- Build Errors section ---
     ERROR_URLS=$(echo "$ERROR_ENTRIES" | cut -f1 | sort -u -V -r | grep . || true)
