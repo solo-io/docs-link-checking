@@ -61,7 +61,9 @@ exclude = [
 
   # Bare product name from Mermaid diagrams rendered as raw text in HTML
   "^agentgateway$",
-]
+  "^agentregistry$",
+] "^gateway$",
+  "^kgateway$",
 
 
 
