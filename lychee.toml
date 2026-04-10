@@ -58,6 +58,9 @@ exclude = [
 
   # Specific URLs excluded by content team
   ".*articles/4414409064596.*",
+
+  # Bare product name from Mermaid diagrams rendered as raw text in HTML
+  "^agentgateway$",
 ]
 
 
