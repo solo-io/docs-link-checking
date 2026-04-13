@@ -59,6 +59,20 @@ exclude = [
   # Specific URLs excluded by content team
   ".*articles/4414409064596.*",
 
+  # JavaScript-rendered or SPA-routed anchors that lychee can't see in static HTML.
+  # The pages load and the anchors work in browsers, but lychee's static parser
+  # finds no matching id="..." because the section IDs are added by JS at runtime.
+  # Scope these patterns narrowly — many docs sites expose most anchors statically,
+  # so broad per-domain excludes would hide real broken anchors.
+  "^https?://kubernetes\\.io/docs/tasks/tools/#",                              # tab-rendered tool anchors
+  "^https?://console\\.aws\\.amazon\\.com/.+#/",                               # AWS console SPA hash routing
+
+  # Always-redirecting URLs that are intentionally short-form / canonical:
+  # we want to keep the source URL because it auto-resolves to the latest target.
+  "^https?://github\\.com/[^/]+/[^/]+/releases/latest$",  # always redirects to current release tag
+  "^https?://discord\\.gg/",                              # canonical short form, redirects to discord.com/invite/
+  "^https?://github\\.com/user-attachments/assets/",      # redirects to time-limited S3 signed URLs
+
   # Theme logo link (relLangURL "") produces a relative href like "agentgateway/"
   # which lychee resolves to a path ending in the bare product name. This also
   # catches Mermaid diagram text that lychee misinterprets as links.
