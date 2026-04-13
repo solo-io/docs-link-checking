@@ -275,6 +275,12 @@ skip_redirect() {
   [[ "$final_lower" == *"en_us"* ]] && [[ "$orig_lower" != *"en_us"* ]] && return 0
   [[ "$final_lower" == *"en-us"* ]] && [[ "$orig_lower" != *"en-us"* ]] && return 0
 
+  # Locale redirect: /en or /en/ path segment added in redirect but not original
+  [[ "$final_lower" == *"/en/"* || "$final_lower" == *"/en" ]] \
+    && [[ "$orig_lower" != *"/en/"* ]] \
+    && [[ "$orig_lower" != *"/en" ]] \
+    && return 0
+
   # Auth redirect: login or signin in redirect but not original
   [[ "$final_lower" == *"login"* ]] && [[ "$orig_lower" != *"login"* ]] && return 0
   [[ "$final_lower" == *"signin"* ]] && [[ "$orig_lower" != *"signin"* ]] && return 0
