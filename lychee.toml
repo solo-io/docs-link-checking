@@ -101,4 +101,11 @@ verbose = "debug"
 
 no_progress = true
 
+# Network behavior. The default 128-concurrent setting overwhelms some upstream
+# docs hosts (kubernetes.io, cert-manager.io) and causes connection failures
+# that lychee then misreports as missing fragments. Lower concurrency, longer
+# timeouts, and more retries with longer waits give those sites room to respond.
 timeout = 30
+max_concurrency = 16
+max_retries = 5
+retry_wait_time = 5
