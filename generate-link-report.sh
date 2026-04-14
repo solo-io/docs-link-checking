@@ -288,6 +288,11 @@ skip_redirect() {
   # Home redirect: /home in redirect but not original
   [[ "$final_lower" == *"/home"* ]] && [[ "$orig_lower" != *"/home"* ]] && return 0
 
+  # agentgateway.dev/examples/ intentionally redirects to raw.githubusercontent.com
+  [[ "$orig_lower" == *"agentgateway.dev/examples/"* ]] \
+    && [[ "$final_lower" == *"raw.githubusercontent.com/"* ]] \
+    && return 0
+
   return 1
 }
 
