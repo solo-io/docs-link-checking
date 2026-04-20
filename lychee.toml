@@ -109,4 +109,4 @@ timeout = 30
 max_concurrency = 16
 max_retries = 5
 retry_wait_time = 5
-host_request_interval = 2
+host_request_interval = "2s"
