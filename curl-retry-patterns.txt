@@ -7,3 +7,4 @@
 cert-manager\.io
 kubernetes\.io
 opentelemetry\.io
+raw\.githubusercontent\.com
