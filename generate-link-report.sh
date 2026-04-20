@@ -65,6 +65,16 @@ if [ ! -f "$JSON_FILE" ]; then
   exit 1
 fi
 
+# Retry flaky failures with curl before generating the report.
+# Domains in curl-retry-patterns.txt are known to drop connections under CI
+# load but respond fine to a single curl request. This removes false positives
+# from the JSON before we count errors.
+RETRY_SCRIPT="$SCRIPT_DIR/curl-retry-failures.sh"
+if [ -x "$RETRY_SCRIPT" ] || [ -f "$RETRY_SCRIPT" ]; then
+  chmod +x "$RETRY_SCRIPT"
+  "$RETRY_SCRIPT" "$JSON_FILE" || true
+fi
+
 # Counts from Lychee JSON (we report unique errors so the summary matches the list below)
 REDIRECTS=$(jq -r '.redirects // (.redirect_map | length) // 0' "$JSON_FILE")
 if [ "$REDIRECTS" = "null" ]; then REDIRECTS=0; fi

@@ -1,0 +1,8 @@
+# Domains that frequently drop connections when hit by lychee in CI but
+# respond fine to a single curl request. URLs matching these patterns are
+# retried with curl before being included in the error report.
+#
+# One grep -E pattern per line. Blank lines and # comments are ignored.
+
+cert-manager\.io
+opentelemetry\.io
