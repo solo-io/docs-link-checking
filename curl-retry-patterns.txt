@@ -5,4 +5,5 @@
 # One grep -E pattern per line. Blank lines and # comments are ignored.
 
 cert-manager\.io
+kubernetes\.io
 opentelemetry\.io
