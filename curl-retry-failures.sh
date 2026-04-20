@@ -35,13 +35,24 @@ if [ -z "$COMBINED_PATTERN" ]; then
   exit 0
 fi
 
-# Extract unique error URLs from lychee JSON
+# Extract unique error URLs from lychee JSON, excluding fragment/anchor warnings.
+# Lychee puts both real errors and broken-anchor warnings in the same error_map.
+# Fragment warnings contain "fragment" in their status details — skip those since
+# curl can't verify anchors anyway.
 ERROR_URLS=$(jq -r '
   (.error_map // .fail_map // {} | to_entries[] |
     .value as $v |
     if ($v | type) == "string" then $v
-    elif ($v | type) == "object" then ($v.url // $v.uri // empty)
-    elif ($v | type) == "array" then ($v[] | .url // .uri // empty)
+    elif ($v | type) == "object" then
+      if (($v.status.details // $v.status.text // $v.details // "") | ascii_downcase | contains("fragment")) then empty
+      else ($v.url // $v.uri // empty)
+      end
+    elif ($v | type) == "array" then
+      ($v[] |
+        if ((.status.details // .status.text // .details // "") | ascii_downcase | contains("fragment")) then empty
+        else (.url // .uri // empty)
+        end
+      )
     else empty
     end
   )
