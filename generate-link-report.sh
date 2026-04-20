@@ -198,9 +198,9 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
         sources=$(echo "$ERROR_ENTRIES" | awk -F'\t' -v u="$url" '$1==u { print $3 }' | sort -u)
         source_count=$(echo "$sources" | grep -c . || true)
         # Extract the first non-empty status/details for this URL
-        status_detail=$(echo "$ERROR_ENTRIES" | awk -F'\t' -v u="$url" '$1==u && $2!="" { print $2; exit }')
+        status_detail=$(echo "$ERROR_ENTRIES" | awk -F'\t' -v u="$url" '$1==u && $2!="" { print $2; exit }' 2>/dev/null || true)
         # Shorten verbose network error messages
-        [[ "$status_detail" == *"Network error:"* ]] && status_detail=$(echo "$status_detail" | sed 's/ (error .*//')
+        [[ "$status_detail" == *"Network error:"* ]] && status_detail=$(echo "$status_detail" | sed 's/ (error .*//' || true)
         display_url="$url"
         if [[ "$url" == file:///* ]]; then
           rest="${url#file://}"
@@ -242,8 +242,8 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
         [ -z "$url" ] && continue
         sources=$(echo "$WARN_ENTRIES" | awk -F'\t' -v u="$url" '$1==u { print $3 }' | sort -u)
         source_count=$(echo "$sources" | grep -c . || true)
-        status_detail=$(echo "$WARN_ENTRIES" | awk -F'\t' -v u="$url" '$1==u && $2!="" { print $2; exit }')
-        [[ "$status_detail" == *"Network error:"* ]] && status_detail=$(echo "$status_detail" | sed 's/ (error .*//')
+        status_detail=$(echo "$WARN_ENTRIES" | awk -F'\t' -v u="$url" '$1==u && $2!="" { print $2; exit }' 2>/dev/null || true)
+        [[ "$status_detail" == *"Network error:"* ]] && status_detail=$(echo "$status_detail" | sed 's/ (error .*//' || true)
         display_url="$url"
         if [[ "$url" == file:///* ]]; then
           rest="${url#file://}"
