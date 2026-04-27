@@ -414,6 +414,16 @@ ${FAIL_SECTION}
 ${WARN_SECTION}
 ${REDIRECT_SECTION}"
 
+# Signal whether there are any reportable issues after filtering.
+# Workflows use this to skip issue creation when all counts are 0.
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  if [ "${UNIQUE_ERRORS:-0}" -gt 0 ] || [ "${UNIQUE_WARNINGS:-0}" -gt 0 ] || [ "${DISPLAYED_REDIRECTS:-0}" -gt 0 ]; then
+    echo "has_issues=true" >> "$GITHUB_OUTPUT"
+  else
+    echo "has_issues=false" >> "$GITHUB_OUTPUT"
+  fi
+fi
+
 if [ -n "$OUTPUT_FILE" ]; then
   echo "$REPORT" > "$OUTPUT_FILE"
 else
