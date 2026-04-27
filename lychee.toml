@@ -95,7 +95,10 @@ exclude_all_private = true
 # Accepted HTTP status codes (3xx not included - redirects will be reported)
 accept = ["100..=103", "200..=299", "403", "502", "503"]
 
-include_fragments = true
+# In lychee >= 0.24, this is a string enum: none|anchor-only|text-only|full.
+# "anchor-only" matches the legacy boolean-true behavior (check #section anchors,
+# skip text fragments like #:~:text=...).
+include_fragments = "anchor-only"
 
 verbose = "debug"
 
