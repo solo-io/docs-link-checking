@@ -76,10 +76,16 @@ if [ -n "${ISSUE_NUMBER:-}" ]; then
         | jq -r --arg p "$PRODUCT" \
             '[.data.organization.projectV2.fields.nodes[]? | select(.name == "Product") | .options[]? | select(.name == $p)][0].id // empty')
 
+      ITEM_ADD_ERR=$(mktemp)
       ITEM_JSON=$(gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_ORG" \
         --url "https://github.com/${REPOSITORY}/issues/${ISSUE_NUMBER}" \
-        --format json 2>/dev/null || echo '{}')
+        --format json 2>"$ITEM_ADD_ERR" || echo '{}')
       ITEM_ID=$(echo "$ITEM_JSON" | jq -r '.id // empty')
+      if [ -z "$ITEM_ID" ] && [ -s "$ITEM_ADD_ERR" ]; then
+        echo "gh project item-add stderr:"
+        cat "$ITEM_ADD_ERR"
+      fi
+      rm -f "$ITEM_ADD_ERR"
 
       if [ -n "$ITEM_ID" ] && [ -n "$PROJECT_ID" ] && [ -n "$FIELD_ID" ] && [ -n "$OPTION_ID" ]; then
         gh api graphql -f query='
