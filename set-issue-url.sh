@@ -24,66 +24,8 @@ if [ -n "${ISSUE_NUMBER:-}" ]; then
     done
   fi
 
-  # Add to project 24 and set Product field if PRODUCT is set
-  if [ -n "${PRODUCT:-}" ]; then
-    # GitHub Projects V2 requires the OAuth 'project' scope; use GH_PROJECT_TOKEN if provided
-    [ -n "${GH_PROJECT_TOKEN:-}" ] && export GH_TOKEN="$GH_PROJECT_TOKEN"
-    PROJECT_ORG="solo-io"
-    PROJECT_NUMBER=24
-
-    PROJECT_DATA=$(gh api graphql -F projectNumber=$PROJECT_NUMBER -f org="$PROJECT_ORG" -f query='
-      query($projectNumber: Int!, $org: String!) {
-        organization(login: $org) {
-          projectV2(number: $projectNumber) {
-            id
-            fields(first: 50) {
-              nodes {
-                ... on ProjectV2SingleSelectField {
-                  id
-                  name
-                  options { id name }
-                }
-              }
-            }
-          }
-        }
-      }
-    ')
-
-    PROJECT_ID=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.id')
-    FIELD_ID=$(echo "$PROJECT_DATA" \
-      | jq -r '.data.organization.projectV2.fields.nodes[] | select(.name == "Product") | .id')
-    OPTION_ID=$(echo "$PROJECT_DATA" \
-      | jq -r --arg p "$PRODUCT" \
-          '.data.organization.projectV2.fields.nodes[] | select(.name == "Product") | .options[] | select(.name == $p) | .id')
-
-    ITEM_JSON=$(gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_ORG" \
-      --url "https://github.com/${REPOSITORY}/issues/${ISSUE_NUMBER}" \
-      --format json 2>/dev/null || echo '{}')
-    ITEM_ID=$(echo "$ITEM_JSON" | jq -r '.id // empty')
-
-    if [ -n "$ITEM_ID" ] && [ -n "$OPTION_ID" ]; then
-      gh api graphql -f query='
-        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-          updateProjectV2ItemFieldValue(input: {
-            projectId: $projectId
-            itemId: $itemId
-            fieldId: $fieldId
-            value: { singleSelectOptionId: $optionId }
-          }) {
-            projectV2Item { id }
-          }
-        }
-      ' -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$FIELD_ID" -f optionId="$OPTION_ID"
-      echo "Added issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER} with Product: ${PRODUCT}"
-    elif [ -n "$ITEM_ID" ]; then
-      echo "Added issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER} (Product option '${PRODUCT}' not found, field not set)"
-    else
-      echo "Warning: could not add issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER}"
-    fi
-  fi
-
-  # Close any older open issues with the same title, excluding the one just created
+  # Close any older open issues with the same title, excluding the one just created.
+  # Done before the project update so a project/token failure can't leave stale issues open.
   OLD_ISSUES=$(gh issue list \
     --repo "${REPOSITORY}" \
     --state open \
@@ -95,6 +37,78 @@ if [ -n "${ISSUE_NUMBER:-}" ]; then
     echo "Closing older issue #${OLD}"
     gh issue close "${OLD}" --repo "${REPOSITORY}" --comment "Superseded by #${ISSUE_NUMBER}."
   done
+
+  # Add to project 24 and set Product field if PRODUCT is set.
+  # Wrapped with `set +e` so a missing/under-scoped project token cannot abort the step.
+  if [ -n "${PRODUCT:-}" ]; then
+    if [ -z "${GH_PROJECT_TOKEN:-}" ]; then
+      echo "Warning: GH_PROJECT_TOKEN is empty; project update will likely fail (needs 'read:project' scope). Skipping."
+    else
+      # GitHub Projects V2 requires the OAuth 'project' scope; use GH_PROJECT_TOKEN if provided
+      export GH_TOKEN="$GH_PROJECT_TOKEN"
+      PROJECT_ORG="solo-io"
+      PROJECT_NUMBER=24
+
+      set +e
+      PROJECT_DATA=$(gh api graphql -F projectNumber=$PROJECT_NUMBER -f org="$PROJECT_ORG" -f query='
+        query($projectNumber: Int!, $org: String!) {
+          organization(login: $org) {
+            projectV2(number: $projectNumber) {
+              id
+              fields(first: 50) {
+                nodes {
+                  ... on ProjectV2SingleSelectField {
+                    id
+                    name
+                    options { id name }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ')
+
+      PROJECT_ID=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.id // empty')
+      FIELD_ID=$(echo "$PROJECT_DATA" \
+        | jq -r '[.data.organization.projectV2.fields.nodes[]? | select(.name == "Product")][0].id // empty')
+      OPTION_ID=$(echo "$PROJECT_DATA" \
+        | jq -r --arg p "$PRODUCT" \
+            '[.data.organization.projectV2.fields.nodes[]? | select(.name == "Product") | .options[]? | select(.name == $p)][0].id // empty')
+
+      ITEM_ADD_ERR=$(mktemp)
+      ITEM_JSON=$(gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_ORG" \
+        --url "https://github.com/${REPOSITORY}/issues/${ISSUE_NUMBER}" \
+        --format json 2>"$ITEM_ADD_ERR" || echo '{}')
+      ITEM_ID=$(echo "$ITEM_JSON" | jq -r '.id // empty')
+      if [ -z "$ITEM_ID" ] && [ -s "$ITEM_ADD_ERR" ]; then
+        echo "gh project item-add stderr:"
+        cat "$ITEM_ADD_ERR"
+      fi
+      rm -f "$ITEM_ADD_ERR"
+
+      if [ -n "$ITEM_ID" ] && [ -n "$PROJECT_ID" ] && [ -n "$FIELD_ID" ] && [ -n "$OPTION_ID" ]; then
+        gh api graphql -f query='
+          mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+            updateProjectV2ItemFieldValue(input: {
+              projectId: $projectId
+              itemId: $itemId
+              fieldId: $fieldId
+              value: { singleSelectOptionId: $optionId }
+            }) {
+              projectV2Item { id }
+            }
+          }
+        ' -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$FIELD_ID" -f optionId="$OPTION_ID" \
+          && echo "Added issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER} with Product: ${PRODUCT}"
+      elif [ -n "$ITEM_ID" ]; then
+        echo "Added issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER} (Product option '${PRODUCT}' not found or project metadata unavailable; field not set)"
+      else
+        echo "Warning: could not add issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER}"
+      fi
+      set -e
+    fi
+  fi
 else
   echo "issue_url=" >> "$GITHUB_OUTPUT"
   echo "issue_line=" >> "$GITHUB_OUTPUT"
