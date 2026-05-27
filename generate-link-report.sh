@@ -172,14 +172,16 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
     # URL doesn't appear in both sections.
     FRAGMENT_URLS=$(echo "$FAIL_ENTRIES" | awk -F'\t' 'tolower($2) ~ /fragment/ { print $1 }' | sort -u || true)
     if [ -n "$FRAGMENT_URLS" ]; then
-      ERROR_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' -v frag="$FRAGMENT_URLS" '
-        BEGIN { split(frag, a, "\n"); for (i in a) urls[a[i]]=1 }
-        !($1 in urls)
-      ' || true)
-      WARN_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' -v frag="$FRAGMENT_URLS" '
-        BEGIN { split(frag, a, "\n"); for (i in a) urls[a[i]]=1 }
-        ($1 in urls)
-      ' || true)
+      # Write fragment URLs to a temp file so awk can read them without hitting
+      # the -v newline limitation (awk -v does not allow literal newlines in a
+      # variable value, which silently empties ERROR_ENTRIES / WARN_ENTRIES).
+      _FRAG_TMP=$(mktemp)
+      printf '%s\n' "$FRAGMENT_URLS" > "$_FRAG_TMP"
+      ERROR_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' \
+        'NR==FNR { urls[$0]=1; next } !($1 in urls)' "$_FRAG_TMP" - || true)
+      WARN_ENTRIES=$(echo "$FAIL_ENTRIES" | awk -F'\t' \
+        'NR==FNR { urls[$0]=1; next } ($1 in urls)' "$_FRAG_TMP" - || true)
+      rm -f "$_FRAG_TMP"
     else
       ERROR_ENTRIES="$FAIL_ENTRIES"
       WARN_ENTRIES=""
@@ -327,13 +329,18 @@ skip_redirect() {
 REDIRECT_SECTION=""
 DISPLAYED_REDIRECTS=0
 if [ "${REDIRECTS:-0}" -gt 0 ]; then
-  # Include source page (redirect_map key) as third field so we can show "Found on"
+  # Include source page (redirect_map key) as third field so we can show "Found on".
+  # Lychee ≥0.15 redirect_map entries use { origin, redirects: [{url, code}] };
+  # older builds used { url, status: { redirects: { redirects: [{url,code}] } } }.
+  # Accept both shapes so the report works across lychee versions.
   REDIRECT_ENTRIES=$(jq -r '
     (.redirect_map // {} | to_entries[] |
       .key as $source |
       .value[]? |
-      .url as $original |
-      (.status.redirects.redirects[-1].url // .url) as $final |
+      # Prefer .origin (current lychee format); fall back to .url (older format)
+      ((.origin // .url) // "") as $original |
+      # Prefer .redirects[-1].url; fall back to nested .status path
+      ((.redirects[-1].url // .status.redirects.redirects[-1].url // .origin // .url) // "") as $final |
       "\($original)\t\($final)\t\($source)"
     ) | select(length > 0)
   ' "$JSON_FILE" 2>/dev/null || true)
