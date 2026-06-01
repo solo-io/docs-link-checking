@@ -210,9 +210,9 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
           [[ "$rest" == *"/public/"* ]] && display_url="public/${rest#*/public/}" || display_url="${rest#/}"
         fi
         if [ -n "$status_detail" ]; then
-          printf '- [ ] `%s` — %s\n' "$display_url" "$status_detail" >> "$_FAIL_TMP"
+          printf -- '- [ ] `%s` — %s\n' "$display_url" "$status_detail" >> "$_FAIL_TMP"
         else
-          printf '- [ ] `%s`\n' "$display_url" >> "$_FAIL_TMP"
+          printf -- '- [ ] `%s`\n' "$display_url" >> "$_FAIL_TMP"
         fi
         first=1
         n=0
@@ -251,9 +251,9 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
           [[ "$rest" == *"/public/"* ]] && display_url="public/${rest#*/public/}" || display_url="${rest#/}"
         fi
         if [ -n "$status_detail" ]; then
-          printf '- [ ] `%s` — %s\n' "$display_url" "$status_detail" >> "$_WARN_TMP"
+          printf -- '- [ ] `%s` — %s\n' "$display_url" "$status_detail" >> "$_WARN_TMP"
         else
-          printf '- [ ] `%s`\n' "$display_url" >> "$_WARN_TMP"
+          printf -- '- [ ] `%s`\n' "$display_url" >> "$_WARN_TMP"
         fi
         first=1
         n=0
@@ -373,9 +373,9 @@ if [ "${REDIRECTS:-0}" -gt 0 ]; then
       sources=$(echo "$REDIRECT_ENTRIES" | awk -F'\t' -v u="$original" '$1==u { print $3 }' | sort -u)
       source_count=$(echo "$sources" | grep -c . || true)
       if [ -n "$final" ] && [ "$original" != "$final" ]; then
-        printf '- [ ] `%s` → `%s`\n' "$original" "$final" >> "$_REDIR_TMP"
+        printf -- '- [ ] `%s` → `%s`\n' "$original" "$final" >> "$_REDIR_TMP"
       else
-        printf '- [ ] `%s` (redirect)\n' "$original" >> "$_REDIR_TMP"
+        printf -- '- [ ] `%s` (redirect)\n' "$original" >> "$_REDIR_TMP"
       fi
       first=1
       n=0
