@@ -36,6 +36,7 @@ exclude = [
   "https?://thanos-querier\\.openshift-monitoring\\.svc[^/]*",
 
   # External services that block or rate-limit link checkers
+  ".*api\\.ai\\.prod\\.eu-central-1\\.aws\\.ml\\.hana\\.ondemand\\.com.*",
   ".*app\\.excalidraw.*",
   ".*management\\.azure\\.com.*",
   ".*storage\\.googleapis.*",
