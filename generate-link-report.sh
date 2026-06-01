@@ -103,7 +103,7 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
   if [ -n "$FAIL_ENTRIES" ]; then
     # Apply version-drift filter (same as before)
     if [ -n "$PUBLIC_DIR" ] && [ -d "$PUBLIC_DIR" ]; then
-      FILTERED_ENTRIES=""
+      _FILT_TMP=$(mktemp)
       while IFS= read -r entry; do
         [ -z "$entry" ] && continue
         url=$(printf '%s' "$entry" | cut -f1)
@@ -143,24 +143,26 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
           fi
         fi
 
-        [ "$exclude" -eq 0 ] && FILTERED_ENTRIES="${FILTERED_ENTRIES}${entry}"$'\n'
+        [ "$exclude" -eq 0 ] && printf '%s\n' "$entry" >> "$_FILT_TMP"
       done <<< "$FAIL_ENTRIES"
-      FAIL_ENTRIES="$FILTERED_ENTRIES"
+      FAIL_ENTRIES=$(cat "$_FILT_TMP")
+      rm -f "$_FILT_TMP"
     fi
 
     # Scope to PR-changed files: keep entries where source or target matches a changed file
     if [ ${#CHANGED_SLUGS[@]} -gt 0 ]; then
-      FILTERED_ENTRIES=""
+      _FILT_TMP=$(mktemp)
       while IFS= read -r entry; do
         [ -z "$entry" ] && continue
         url=$(printf '%s' "$entry" | cut -f1)
         src=$(printf '%s' "$entry" | cut -f3-)
         # Include if source (edited file has broken link) or target (link points to edited file) matches
         if matches_changed_file "$src" || matches_changed_file "$url"; then
-          FILTERED_ENTRIES="${FILTERED_ENTRIES}${entry}"$'\n'
+          printf '%s\n' "$entry" >> "$_FILT_TMP"
         fi
       done <<< "$FAIL_ENTRIES"
-      FAIL_ENTRIES="$FILTERED_ENTRIES"
+      FAIL_ENTRIES=$(cat "$_FILT_TMP")
+      rm -f "$_FILT_TMP"
     fi
 
     # Drop false-positive fragment errors for GitHub line-range anchors (#L123 / #L123-L456).
@@ -191,9 +193,8 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
     ERROR_URLS=$(echo "$ERROR_ENTRIES" | cut -f1 | sort -u -V -r | grep . || true)
     UNIQUE_ERRORS=$(echo "$ERROR_URLS" | grep -c . || true)
     if [ -n "$ERROR_ENTRIES" ] && [ "${UNIQUE_ERRORS:-0}" -gt 0 ]; then
-      FAIL_SECTION="## Errors (newest versions first)
-
-"
+      _FAIL_TMP=$(mktemp)
+      printf '## Errors (newest versions first)\n\n' > "$_FAIL_TMP"
       MAX_SOURCES=5
       while IFS= read -r url; do
         [ -z "$url" ] && continue
@@ -209,11 +210,9 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
           [[ "$rest" == *"/public/"* ]] && display_url="public/${rest#*/public/}" || display_url="${rest#/}"
         fi
         if [ -n "$status_detail" ]; then
-          FAIL_SECTION="${FAIL_SECTION}- [ ] \`${display_url}\` — ${status_detail}
-"
+          printf '- [ ] `%s` — %s\n' "$display_url" "$status_detail" >> "$_FAIL_TMP"
         else
-          FAIL_SECTION="${FAIL_SECTION}- [ ] \`${display_url}\`
-"
+          printf '- [ ] `%s`\n' "$display_url" >> "$_FAIL_TMP"
         fi
         first=1
         n=0
@@ -227,18 +226,18 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
           fi
         done <<< "$sources"
         [ "$source_count" -gt "$MAX_SOURCES" ] && found_on="$found_on, and $((source_count - MAX_SOURCES)) more"
-        [ -n "$found_on" ] && FAIL_SECTION="${FAIL_SECTION}${found_on}
-"
+        [ -n "$found_on" ] && printf '%s\n' "$found_on" >> "$_FAIL_TMP"
       done <<< "$ERROR_URLS"
+      FAIL_SECTION=$(cat "$_FAIL_TMP")
+      rm -f "$_FAIL_TMP"
     fi
 
     # --- Build Warnings section (fragment anchor errors) ---
     WARN_URLS=$(echo "$WARN_ENTRIES" | cut -f1 | sort -u -V -r | grep . || true)
     UNIQUE_WARNINGS=$(echo "$WARN_URLS" | grep -c . || true)
     if [ -n "$WARN_ENTRIES" ] && [ "${UNIQUE_WARNINGS:-0}" -gt 0 ]; then
-      WARN_SECTION="## Warnings — broken anchors (newest versions first)
-
-"
+      _WARN_TMP=$(mktemp)
+      printf '## Warnings — broken anchors (newest versions first)\n\n' > "$_WARN_TMP"
       MAX_SOURCES=5
       while IFS= read -r url; do
         [ -z "$url" ] && continue
@@ -252,11 +251,9 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
           [[ "$rest" == *"/public/"* ]] && display_url="public/${rest#*/public/}" || display_url="${rest#/}"
         fi
         if [ -n "$status_detail" ]; then
-          WARN_SECTION="${WARN_SECTION}- [ ] \`${display_url}\` — ${status_detail}
-"
+          printf '- [ ] `%s` — %s\n' "$display_url" "$status_detail" >> "$_WARN_TMP"
         else
-          WARN_SECTION="${WARN_SECTION}- [ ] \`${display_url}\`
-"
+          printf '- [ ] `%s`\n' "$display_url" >> "$_WARN_TMP"
         fi
         first=1
         n=0
@@ -270,9 +267,10 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
           fi
         done <<< "$sources"
         [ "$source_count" -gt "$MAX_SOURCES" ] && found_on="$found_on, and $((source_count - MAX_SOURCES)) more"
-        [ -n "$found_on" ] && WARN_SECTION="${WARN_SECTION}${found_on}
-"
+        [ -n "$found_on" ] && printf '%s\n' "$found_on" >> "$_WARN_TMP"
       done <<< "$WARN_URLS"
+      WARN_SECTION=$(cat "$_WARN_TMP")
+      rm -f "$_WARN_TMP"
     fi
 
   else
@@ -346,22 +344,22 @@ if [ "${REDIRECTS:-0}" -gt 0 ]; then
   ' "$JSON_FILE" 2>/dev/null || true)
   # Scope redirects to PR-changed files
   if [ -n "$REDIRECT_ENTRIES" ] && [ ${#CHANGED_SLUGS[@]} -gt 0 ]; then
-    FILTERED_ENTRIES=""
+    _FILT_TMP=$(mktemp)
     while IFS= read -r entry; do
       [ -z "$entry" ] && continue
       url=$(printf '%s' "$entry" | cut -f1)
       src=$(printf '%s' "$entry" | cut -f3-)
       if matches_changed_file "$src" || matches_changed_file "$url"; then
-        FILTERED_ENTRIES="${FILTERED_ENTRIES}${entry}"$'\n'
+        printf '%s\n' "$entry" >> "$_FILT_TMP"
       fi
     done <<< "$REDIRECT_ENTRIES"
-    REDIRECT_ENTRIES="$FILTERED_ENTRIES"
+    REDIRECT_ENTRIES=$(cat "$_FILT_TMP")
+    rm -f "$_FILT_TMP"
   fi
 
   if [ -n "$REDIRECT_ENTRIES" ]; then
-    REDIRECT_SECTION="## Redirects (newest versions first)
-
-"
+    _REDIR_TMP=$(mktemp)
+    printf '## Redirects (newest versions first)\n\n' > "$_REDIR_TMP"
     MAX_SOURCES=5
     REDIRECT_URLS=$(echo "$REDIRECT_ENTRIES" | cut -f1 | sort -u -V -r)
     while IFS= read -r original; do
@@ -375,11 +373,9 @@ if [ "${REDIRECTS:-0}" -gt 0 ]; then
       sources=$(echo "$REDIRECT_ENTRIES" | awk -F'\t' -v u="$original" '$1==u { print $3 }' | sort -u)
       source_count=$(echo "$sources" | grep -c . || true)
       if [ -n "$final" ] && [ "$original" != "$final" ]; then
-        REDIRECT_SECTION="${REDIRECT_SECTION}- [ ] \`${original}\` → \`${final}\`
-"
+        printf '- [ ] `%s` → `%s`\n' "$original" "$final" >> "$_REDIR_TMP"
       else
-        REDIRECT_SECTION="${REDIRECT_SECTION}- [ ] \`${original}\` (redirect)
-"
+        printf '- [ ] `%s` (redirect)\n' "$original" >> "$_REDIR_TMP"
       fi
       first=1
       n=0
@@ -393,10 +389,14 @@ if [ "${REDIRECTS:-0}" -gt 0 ]; then
         fi
       done <<< "$sources"
       [ "$source_count" -gt "$MAX_SOURCES" ] && found_on="$found_on, and $((source_count - MAX_SOURCES)) more"
-      [ -n "$found_on" ] && REDIRECT_SECTION="${REDIRECT_SECTION}${found_on}
-"
+      [ -n "$found_on" ] && printf '%s\n' "$found_on" >> "$_REDIR_TMP"
     done <<< "$REDIRECT_URLS"
-    [ "$DISPLAYED_REDIRECTS" -eq 0 ] && REDIRECT_SECTION=""
+    if [ "$DISPLAYED_REDIRECTS" -eq 0 ]; then
+      REDIRECT_SECTION=""
+    else
+      REDIRECT_SECTION=$(cat "$_REDIR_TMP")
+    fi
+    rm -f "$_REDIR_TMP"
   else
     DISPLAYED_REDIRECTS="$REDIRECTS"
     REDIRECT_SECTION="## Redirects
