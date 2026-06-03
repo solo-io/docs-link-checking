@@ -73,6 +73,8 @@ exclude = [
   "^https?://github\\.com/[^/]+/[^/]+/releases/latest$",  # always redirects to current release tag
   "^https?://discord\\.gg/",                              # canonical short form, redirects to discord.com/invite/
   "^https?://github\\.com/user-attachments/assets/",      # redirects to time-limited S3 signed URLs
+  "^https?://slack\\.cncf\\.io/",                         # CNCF Slack canonical invite, redirects to communityinviter
+  "^https?://cloud-native\\.slack\\.com/archives/",       # Slack channel links redirect to a login/auth page
 
   # Theme logo link (relLangURL "") produces a relative href like "agentgateway/"
   # which lychee resolves to a path ending in the bare product name. This also
