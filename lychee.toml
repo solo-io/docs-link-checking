@@ -82,6 +82,8 @@ exclude = [
   "agentgateway/?$",
   "agentregistry/?$",
   "gateway/?$",
+  "gloo-mesh-enterprise/?$",
+  "gloo-mesh-gateway/?$",
   "istio/?$",
   "kgateway/?$",
 ]
