@@ -136,8 +136,14 @@ for url in "${PASSED_URLS[@]}"; do
     else . end"
 done
 
-# Also update the error count
-JQ_FILTER="$JQ_FILTER | if .errors then .errors = (.errors - ${#PASSED_URLS[@]} | if . < 0 then 0 else . end) else . end"
+# Recompute the error count from the pruned error_map rather than subtracting the
+# number of passed URLs. Lychee's top-level .errors counts every failed check
+# (the same URL on N pages counts N times, plus cached repeats), so it can be far
+# larger than the entries actually listed in .error_map. Subtracting a unique-URL
+# count left .errors stale (e.g. 53) after the arrays were emptied, which made the
+# report claim "N broken link(s) found" with nothing to list. Deriving .errors
+# from what remains in error_map keeps the count and the list in sync.
+JQ_FILTER="$JQ_FILTER | if .errors then .errors = ([.error_map[]? | if type == \"array\" then length elif . == null then 0 else 1 end] | add // 0) else . end"
 
 # Apply the filter
 TMP_FILE=$(mktemp)

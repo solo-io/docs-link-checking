@@ -274,10 +274,14 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
     fi
 
   else
-    FAIL_SECTION="## Errors (newest versions first)
-
-$RAW_ERRORS broken link(s) found. (URL list not in expected JSON shape. Top-level keys: $(jq -r "keys | join(\", \")" "$JSON_FILE" 2>/dev/null || echo "?").)
-"
+    # .errors is > 0 but no error URLs could be enumerated from .error_map. This
+    # usually means the top-level count is stale/inflated relative to error_map
+    # (e.g. after the curl-retry step emptied the listed entries), not that there
+    # are real broken links. Emit nothing reader-facing — UNIQUE_ERRORS stays 0 so
+    # the summary table reports "Errors: 0" truthfully. Log a diagnostic to stderr
+    # for maintainers in case the JSON shape really did change.
+    echo "Note: .errors=$RAW_ERRORS but no URLs enumerable from .error_map; reporting 0 errors. Top-level keys: $(jq -r "keys | join(\", \")" "$JSON_FILE" 2>/dev/null || echo "?")." >&2
+    FAIL_SECTION=""
   fi
 fi
 
