@@ -35,6 +35,9 @@ exclude = [
   "https?://proxy\\.kagent\\.svc\\.cluster\\.local:8080",
   "https?://thanos-querier\\.openshift-monitoring\\.svc[^/]*",
 
+  # Product deployments
+  "http://agentgateway-enterprise-controller.kagent*",
+
   # External services that block or rate-limit link checkers
   ".*api\\.ai\\.prod\\.eu-central-1\\.aws\\.ml\\.hana\\.ondemand\\.com.*",
   ".*app\\.excalidraw.*",
