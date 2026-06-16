@@ -323,6 +323,27 @@ skip_redirect() {
     && [[ "$final_lower" == *"raw.githubusercontent.com/"* ]] \
     && return 0
 
+  # Solo cross-product /latest/ link resolving to a specific version
+  # (docs.solo.io/<product>/latest/<rest> → /<product>/<X.Y.x>/<rest>). Using
+  # /latest/ is intentional (auto-tracks the newest version), so this exact
+  # redirect is expected. Skip ONLY when the target segment is a real version
+  # (X.Y.x) AND the rest of the path is unchanged — so a /latest/ link that
+  # redirects somewhere else (login, a renamed path, etc.) is still reported,
+  # and a genuinely broken /latest/<page> still errors (404, not a redirect).
+  if [[ "$orig_lower" =~ docs\.solo\.io/([^/]+)/latest/(.*)$ ]]; then
+    local _prod="${BASH_REMATCH[1]}" _rest="${BASH_REMATCH[2]}"
+    if [[ "$final_lower" =~ docs\.solo\.io/${_prod}/[0-9]+\.[0-9]+\.x/(.*)$ ]]; then
+      [ "${BASH_REMATCH[1]}" = "$_rest" ] && return 0
+    fi
+  fi
+
+  # Go vanity import path redirecting to its GitHub repo (e.g.
+  # sigs.k8s.io/gateway-api → github.com/kubernetes-sigs/gateway-api). The
+  # sigs.k8s.io form is the correct one to keep (it's what `go get` uses).
+  [[ "$orig_lower" == *"sigs.k8s.io/gateway-api"* ]] \
+    && [[ "$final_lower" == *"github.com/kubernetes-sigs/gateway-api"* ]] \
+    && return 0
+
   return 1
 }
 

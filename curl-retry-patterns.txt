@@ -5,6 +5,8 @@
 # One grep -E pattern per line. Blank lines and # comments are ignored.
 
 cert-manager\.io
+envoyproxy\.io
+gateway-api\.sigs\.k8s\.io
 git\.k8s\.io
 kubernetes\.io
 opentelemetry\.io
