@@ -90,6 +90,17 @@ if [ -x "$RETRY_SCRIPT" ] || [ -f "$RETRY_SCRIPT" ]; then
   "$RETRY_SCRIPT" "$JSON_FILE" || true
 fi
 
+# Verify broken-anchor warnings against the real (optionally JS-rendered) page and
+# prune the ones that actually resolve. lychee only recognizes id=/name= anchors in
+# static HTML, so it flags anchors exposed via data-key or injected by JS (for
+# example legal.solo.io) even though they work in a browser. This checks them for
+# real instead of blanket-ignoring the URL. See verify-anchors.sh.
+ANCHOR_SCRIPT="$SCRIPT_DIR/verify-anchors.sh"
+if [ -x "$ANCHOR_SCRIPT" ] || [ -f "$ANCHOR_SCRIPT" ]; then
+  chmod +x "$ANCHOR_SCRIPT"
+  "$ANCHOR_SCRIPT" "$JSON_FILE" || true
+fi
+
 # Counts from Lychee JSON (we report unique errors so the summary matches the list below)
 REDIRECTS=$(jq -r '.redirects // (.redirect_map | length) // 0' "$JSON_FILE")
 if [ "$REDIRECTS" = "null" ]; then REDIRECTS=0; fi
