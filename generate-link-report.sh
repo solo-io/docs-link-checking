@@ -51,6 +51,21 @@ if [ -n "$PR_MODE" ]; then
   done <<< "$CHANGED_CONTENT_FILES"
 fi
 
+# Returns 0 if the path segment looks like a docs version (e.g. 2.9, 2.12.x,
+# v2.1, 1.0.0, main, latest, nightly, dev, stable, edge). Used to guard the
+# version-drift filter below so it only fires on genuinely versioned sites.
+# Non-versioned sites (e.g. ambientmesh.io, whose paths are
+# public/docs/<section>/<page> with no version segment) would otherwise have
+# same-named pages in different sections wrongly suppressed as version-switcher
+# links.
+looks_like_version() {
+  [[ "$1" =~ ^v?[0-9]+(\.[0-9]+)*(\.x)?$ ]] && return 0
+  case "$1" in
+    main|latest|nightly|dev|stable|edge) return 0 ;;
+  esac
+  return 1
+}
+
 # Returns 0 (match) if the given path contains any changed-file slug.
 matches_changed_file() {
   local path="$1"
@@ -138,6 +153,8 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
           if [ -n "$url_rel" ] && [ -n "$src_rel_norm" ] \
              && [ "$url_product" = "$src_product" ] \
              && [ "$url_version" != "$src_version" ] \
+             && looks_like_version "$url_version" \
+             && looks_like_version "$src_version" \
              && [ "$url_rel" = "$src_rel_norm" ]; then
             exclude=1
           fi
