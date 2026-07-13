@@ -79,6 +79,8 @@ exclude = [
   "^https?://github\\.com/user-attachments/assets/",      # redirects to time-limited S3 signed URLs
   "^https?://slack\\.cncf\\.io/",                         # CNCF Slack canonical invite, redirects to communityinviter
   "^https?://cloud-native\\.slack\\.com/archives/",       # Slack channel links redirect to a login/auth page
+  "^https?://agentgateway\\.dev/schema/config$",          # canonical short form used in $schema config examples, redirects to raw.githubusercontent config.json
+  "^https?://modelcontextprotocol\\.io/specification$",   # canonical "current spec" pointer, redirects to the latest dated spec (e.g. /specification/2025-11-25)
 
   # Theme logo link (relLangURL "") produces a relative href like "agentgateway/"
   # which lychee resolves to a path ending in the bare product name. This also

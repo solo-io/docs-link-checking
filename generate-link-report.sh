@@ -459,6 +459,38 @@ $REDIRECTS link(s) redirect. (Details not in JSON; check Lychee output.)
   fi
 fi
 
+# --- Broken remote includes (github / github-yaml shortcode fetch failures) ---
+# Lychee cannot see these when the include sits inside a code fence: the
+# "Unable to load code from <a href=…>" error renders inside <pre>, and Lychee
+# skips anchors in code blocks. check-broken-includes.sh greps the built HTML
+# for that marker (parse-independent). Fold its findings into the error count
+# and report so they surface, create issues, and gate PRs exactly like a broken
+# link — no separate workflow step needed. Runs only when a PUBLIC_DIR (arg 3,
+# the built tree) was passed. Scans ALL versions: unlike the Lychee version
+# excludes (which skip retired versions to avoid external link-rot noise), a
+# broken include is a severe, rare, trivially-fixable rendering break worth
+# catching everywhere — so it deliberately does not inherit those excludes.
+INCLUDE_SECTION=""
+INCLUDE_SCRIPT="$SCRIPT_DIR/check-broken-includes.sh"
+# Invoke via `bash` (not requiring the executable bit, which may not survive a
+# sparse/zip checkout) and guard on file existence.
+if [ -n "$PUBLIC_DIR" ] && [ -d "$PUBLIC_DIR" ] && [ -f "$INCLUDE_SCRIPT" ]; then
+  INCLUDE_FINDINGS=$(bash "$INCLUDE_SCRIPT" "$PUBLIC_DIR" 2>/dev/null || true)
+  if [ -n "$INCLUDE_FINDINGS" ]; then
+    INCLUDE_COUNT=$(printf '%s\n' "$INCLUDE_FINDINGS" | grep -c . || true)
+    UNIQUE_ERRORS=$((UNIQUE_ERRORS + INCLUDE_COUNT))
+    _INC_TMP=$(mktemp)
+    printf '## Broken remote includes (%s)\n\n' "$INCLUDE_COUNT" > "$_INC_TMP"
+    printf 'The `github` / `github-yaml` shortcode failed to fetch these URLs at build time. They are invisible to Lychee when the include sits inside a code fence, so they are scanned separately (check-broken-includes.sh). Fix the URL or the example path in the page source.\n\n' >> "$_INC_TMP"
+    while IFS=$'\t' read -r rel url; do
+      [ -z "$rel" ] && continue
+      printf -- '- `%s` → %s\n' "$rel" "$url" >> "$_INC_TMP"
+    done <<< "$INCLUDE_FINDINGS"
+    INCLUDE_SECTION=$(cat "$_INC_TMP")
+    rm -f "$_INC_TMP"
+  fi
+fi
+
 # Summary uses unique error count and displayed redirect count so both match the lists below
 SUMMARY="## Link checking summary for $PRODUCT_NAME
 
@@ -471,6 +503,7 @@ SUMMARY="## Link checking summary for $PRODUCT_NAME
 
 REPORT="${SUMMARY}
 ${FAIL_SECTION}
+${INCLUDE_SECTION}
 ${WARN_SECTION}
 ${REDIRECT_SECTION}"
 
