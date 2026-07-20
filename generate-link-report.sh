@@ -98,7 +98,9 @@ fi
 ANCHOR_SCRIPT="$SCRIPT_DIR/verify-anchors.sh"
 if [ -x "$ANCHOR_SCRIPT" ] || [ -f "$ANCHOR_SCRIPT" ]; then
   chmod +x "$ANCHOR_SCRIPT"
-  "$ANCHOR_SCRIPT" "$JSON_FILE" || true
+  # Pass PUBLIC_DIR so verify-anchors can also check local built-page anchors
+  # (id/name/data-key/data-ks-path) against the static HTML.
+  "$ANCHOR_SCRIPT" "$JSON_FILE" "$PUBLIC_DIR" || true
 fi
 
 # Counts from Lychee JSON (we report unique errors so the summary matches the list below)

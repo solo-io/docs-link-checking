@@ -26,11 +26,20 @@
 # <a name=> in the fetched DOM. Only then is the warning pruned; genuinely
 # broken anchors (renamed/removed sections) stay in the report.
 #
-# The JSON file is modified in place. Only external http(s) anchors are checked;
-# local file:// fragments are left for lychee to resolve against the built site.
+# The JSON file is modified in place. External http(s) anchors are always
+# checked. Local file:// fragments (against the built site) are checked whenever
+# a PUBLIC_DIR is passed as $2. This is safe to always run: lychee already
+# resolves id=/name= fragments for local files, so anything reaching this pass
+# has already failed that check — the only anchors this can prune are ones that
+# resolve via data-key/data-ks-path in the static HTML (the JS-widget case, for
+# example the kubespec tree, which drives in-page navigation from data-ks-path
+# plus a hashchange handler rather than a real id=). Repos with no such widgets
+# see nothing pruned. Local pages are checked against static HTML only (no
+# browser), so the added cost is a grep per local fragment warning.
 set -euo pipefail
 
-JSON_FILE="${1:?Usage: verify-anchors.sh <lychee.json>}"
+JSON_FILE="${1:?Usage: verify-anchors.sh <lychee.json> [public_dir]}"
+PUBLIC_DIR="${2:-}"
 
 if [ ! -f "$JSON_FILE" ]; then
   echo "JSON file not found: $JSON_FILE" >&2
@@ -80,6 +89,20 @@ fetch_dom() {
     -A "Mozilla/5.0 (compatible; solo-link-checker/1.0)" "$url" 2>/dev/null
 }
 
+# A fragment resolves if it appears as id/name/data-key/data-ks-path (double or
+# single quoted). data-key covers SPA scroll targets (legal.solo.io); data-ks-path
+# covers the kubespec tree widget. grep -F keeps regex-special fragment chars safe.
+frag_in_dom() {
+  local file="$1" frag="$2" attr
+  for attr in 'id' 'name' 'data-key' 'data-ks-path'; do
+    if grep -qF "$attr=\"$frag\"" "$file" 2>/dev/null \
+       || grep -qF "$attr='$frag'" "$file" 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # --- Extract fragment-warning URLs (external http/https only) ---
 FRAG_URLS=$(jq -r '
   (.error_map // .fail_map // {} | to_entries[] |
@@ -91,49 +114,82 @@ FRAG_URLS=$(jq -r '
     else empty
     end
   )
-' "$JSON_FILE" 2>/dev/null | grep -E '^https?://.+#.+' | sort -u || true)
+' "$JSON_FILE" 2>/dev/null | sort -u || true)
 
-if [ -z "$FRAG_URLS" ]; then
-  echo "No external fragment warnings to verify — nothing to do."
+# External anchors are always verified; local file:// anchors whenever a valid
+# PUBLIC_DIR is available to resolve them against the built site.
+EXT_FRAG_URLS=$(printf '%s\n' "$FRAG_URLS" | grep -E '^https?://.+#.+' || true)
+LOCAL_FRAG_URLS=""
+if [ -n "$PUBLIC_DIR" ] && [ -d "$PUBLIC_DIR" ]; then
+  LOCAL_FRAG_URLS=$(printf '%s\n' "$FRAG_URLS" | grep -E '^file://.+#.+' || true)
+fi
+
+if [ -z "$EXT_FRAG_URLS" ] && [ -z "$LOCAL_FRAG_URLS" ]; then
+  echo "No fragment warnings to verify — nothing to do."
   exit 0
 fi
 
-FRAG_COUNT=$(echo "$FRAG_URLS" | wc -l | tr -d ' ')
-echo "Verifying $FRAG_COUNT fragment anchor(s)..."
+FRAG_URLS="$EXT_FRAG_URLS"
 
 # Cache DOM per base URL (many anchors can share a page)
 CACHE_DIR=$(mktemp -d)
 trap 'rm -rf "$CACHE_DIR"' EXIT
 
+# Percent-decode a couple of common cases so attr="..." comparisons line up.
+decode_frag() { printf '%s' "$1" | sed 's/%20/ /g; s/%22/"/g; s/%29/)/g'; }
+
 PASSED_URLS=()
-while IFS= read -r url; do
-  [ -z "$url" ] && continue
-  base="${url%%#*}"
-  frag="${url#*#}"
-  # Percent-decode a couple of common cases so id="..." comparisons line up
-  frag_decoded=$(printf '%s' "$frag" | sed 's/%20/ /g; s/%22/"/g; s/%29/)/g')
 
-  cache_key=$(printf '%s' "$base" | tr -c '[:alnum:]' '_')
-  dom_file="$CACHE_DIR/$cache_key.html"
-  [ -f "$dom_file" ] || fetch_dom "$base" > "$dom_file" || true
+# --- External anchors (headless render or curl) ---
+if [ -n "$FRAG_URLS" ]; then
+  FRAG_COUNT=$(printf '%s\n' "$FRAG_URLS" | grep -c . || true)
+  echo "Verifying $FRAG_COUNT external fragment anchor(s)..."
+  while IFS= read -r url; do
+    [ -z "$url" ] && continue
+    base="${url%%#*}"
+    frag_decoded=$(decode_frag "${url#*#}")
 
-  # An anchor resolves if the fragment appears as id/name/data-key (double or
-  # single quoted). grep -F on the value keeps regex-special fragment chars safe.
-  found=0
-  for attr in 'id' 'name' 'data-key'; do
-    if grep -qF "$attr=\"$frag_decoded\"" "$dom_file" 2>/dev/null \
-       || grep -qF "$attr='$frag_decoded'" "$dom_file" 2>/dev/null; then
-      found=1; break
+    cache_key=$(printf '%s' "$base" | tr -c '[:alnum:]' '_')
+    dom_file="$CACHE_DIR/$cache_key.html"
+    [ -f "$dom_file" ] || fetch_dom "$base" > "$dom_file" || true
+
+    if frag_in_dom "$dom_file" "$frag_decoded"; then
+      echo "  RESOLVED: $url"
+      PASSED_URLS+=("$url")
+    else
+      echo "  STILL BROKEN: $url"
     fi
-  done
+  done <<< "$FRAG_URLS"
+fi
 
-  if [ "$found" -eq 1 ]; then
-    echo "  RESOLVED: $url"
-    PASSED_URLS+=("$url")
-  else
-    echo "  STILL BROKEN: $url"
-  fi
-done <<< "$FRAG_URLS"
+# --- Local built-page anchors (static HTML only; opt-in) ---
+if [ -n "$LOCAL_FRAG_URLS" ]; then
+  LOCAL_COUNT=$(printf '%s\n' "$LOCAL_FRAG_URLS" | grep -c . || true)
+  echo "Verifying $LOCAL_COUNT local fragment anchor(s) against $PUBLIC_DIR (static HTML)..."
+  while IFS= read -r url; do
+    [ -z "$url" ] && continue
+    base="${url%%#*}"
+    frag_decoded=$(decode_frag "${url#*#}")
+
+    # file:///abs/.../public/docs/x/index.html -> $PUBLIC_DIR/docs/x/index.html
+    rel="${base#file://}"
+    if [[ "$rel" == *"/public/"* ]]; then
+      local_file="$PUBLIC_DIR/${rel#*/public/}"
+    else
+      local_file="$rel"
+    fi
+    # A directory-style URL resolves to its index.html.
+    [ -d "$local_file" ] && local_file="$local_file/index.html"
+    [[ "$local_file" != *.html && -f "$local_file/index.html" ]] && local_file="$local_file/index.html"
+
+    if [ -f "$local_file" ] && frag_in_dom "$local_file" "$frag_decoded"; then
+      echo "  RESOLVED: $url"
+      PASSED_URLS+=("$url")
+    else
+      echo "  STILL BROKEN: $url"
+    fi
+  done <<< "$LOCAL_FRAG_URLS"
+fi
 
 if [ ${#PASSED_URLS[@]} -eq 0 ]; then
   echo "No fragment warnings verified as resolvable — JSON unchanged."
@@ -142,37 +198,31 @@ fi
 
 echo "Removing ${#PASSED_URLS[@]} verified anchor(s) from JSON..."
 
-# Prune passed URLs from error_map/fail_map, then recompute .errors from what
-# remains (same approach as curl-retry-failures.sh — lychee's top-level count
-# double-counts the same URL across pages, so derive it from the pruned map).
-JQ_FILTER='.'
-for url in "${PASSED_URLS[@]}"; do
-  escaped=$(printf '%s' "$url" | sed 's/\\/\\\\/g; s/"/\\"/g')
-  JQ_FILTER="$JQ_FILTER |
-    if .error_map then
-      .error_map |= with_entries(
-        .value |= (
-          if type == \"array\" then map(select((.url // .uri // \"\") != \"$escaped\"))
-          elif type == \"object\" then (if (.url // .uri // \"\") == \"$escaped\" then null else . end)
-          elif type == \"string\" then (if . == \"$escaped\" then null else . end)
-          else . end
-        ) | select(. != null) | select(if type == \"array\" then length > 0 else true end)
-      )
-    else . end |
-    if .fail_map then
-      .fail_map |= with_entries(
-        .value |= (
-          if type == \"array\" then map(select((.url // .uri // \"\") != \"$escaped\"))
-          elif type == \"object\" then (if (.url // .uri // \"\") == \"$escaped\" then null else . end)
-          elif type == \"string\" then (if . == \"$escaped\" then null else . end)
-          else . end
-        ) | select(. != null) | select(if type == \"array\" then length > 0 else true end)
-      )
-    else . end"
-done
-JQ_FILTER="$JQ_FILTER | if .errors then .errors = ([.error_map[]? | if type == \"array\" then length elif . == null then 0 else 1 end] | add // 0) else . end"
+# Prune passed URLs from error_map/fail_map in a SINGLE pass — O(map size),
+# independent of how many anchors passed (the old per-URL filter was
+# O(passed x map size), which got slow on large reports). The URL list is passed
+# via --argjson as a lookup set, so nothing is interpolated into the jq program.
+# Then recompute .errors from what remains, since lychee's top-level count
+# double-counts a URL across pages (same approach as curl-retry-failures.sh).
+PASSED_JSON=$(printf '%s\n' "${PASSED_URLS[@]}" | jq -R . | jq -s .)
 
 TMP_FILE=$(mktemp)
-jq "$JQ_FILTER" "$JSON_FILE" > "$TMP_FILE" && mv "$TMP_FILE" "$JSON_FILE"
+jq --argjson passed "$PASSED_JSON" '
+  def prune($set):
+    with_entries(
+      (.value |= (
+        if type == "array" then map(select($set[(.url // .uri // "")] | not))
+        elif type == "object" then (if $set[(.url // .uri // "")] then null else . end)
+        elif type == "string" then (if $set[.] then null else . end)
+        else . end
+      ))
+      | select((.value != null)
+               and (if (.value | type) == "array" then (.value | length) > 0 else true end))
+    );
+  ($passed | map({key: ., value: true}) | from_entries) as $set
+  | (if .error_map then .error_map |= prune($set) else . end)
+  | (if .fail_map then .fail_map |= prune($set) else . end)
+  | (if .errors then .errors = ([.error_map[]? | if type == "array" then length elif . == null then 0 else 1 end] | add // 0) else . end)
+' "$JSON_FILE" > "$TMP_FILE" && mv "$TMP_FILE" "$JSON_FILE"
 
 echo "Done. Removed ${#PASSED_URLS[@]} verified anchor(s)."
