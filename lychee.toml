@@ -81,6 +81,7 @@ exclude = [
   "^https?://cloud-native\\.slack\\.com/archives/",       # Slack channel links redirect to a login/auth page
   "^https?://agentgateway\\.dev/schema/config$",          # canonical short form used in $schema config examples, redirects to raw.githubusercontent config.json
   "^https?://modelcontextprotocol\\.io/specification$",   # canonical "current spec" pointer, redirects to the latest dated spec (e.g. /specification/2025-11-25)
+  "^https?://docs\\.crewai\\.com/[a-z]{2}/",              # version-less docs URL (lang-first, e.g. /en/) redirects to the current version (e.g. /v1.15.4/en/); versioned URLs are NOT excluded so stale pins still get flagged
 
   # Theme logo link (relLangURL "") produces a relative href like "agentgateway/"
   # which lychee resolves to a path ending in the bare product name. This also
