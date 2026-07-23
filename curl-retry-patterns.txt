@@ -8,6 +8,7 @@ cert-manager\.io
 envoyproxy\.io
 gateway-api\.sigs\.k8s\.io
 git\.k8s\.io
+istio\.io
 kubernetes\.io
 opentelemetry\.io
 raw\.githubusercontent\.com
