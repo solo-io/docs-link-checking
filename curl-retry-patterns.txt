@@ -7,6 +7,7 @@
 cert-manager\.io
 envoyproxy\.io
 gateway-api\.sigs\.k8s\.io
+gemini.google.com
 git\.k8s\.io
 istio\.io
 kubernetes\.io
