@@ -7,10 +7,10 @@
 cert-manager\.io
 envoyproxy\.io
 gateway-api\.sigs\.k8s\.io
-gemini.google.com
+gemini\.google\.com
 git\.k8s\.io
 istio\.io
 kubernetes\.io
 opentelemetry\.io
 raw\.githubusercontent\.com
-www.squid-cache.org
+squid-cache\.org
