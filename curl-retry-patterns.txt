@@ -12,3 +12,4 @@ istio\.io
 kubernetes\.io
 opentelemetry\.io
 raw\.githubusercontent\.com
+www.squid-cache.org
