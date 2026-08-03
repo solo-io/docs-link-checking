@@ -25,9 +25,20 @@
 # this script. A missing or empty patterns file is fine — status-class retries
 # still run.
 #
-# At most RETRY_MAX URLs (default 25) are retried, so a real upstream outage
-# producing hundreds of timeouts can't stall the report step. Anything skipped by
-# the cap is logged by URL and stays in the report as an error.
+# Retrying is bounded by wall clock, not by URL count: the loop stops once
+# RETRY_BUDGET_SECONDS (default 600) has elapsed. What this is really protecting is
+# the job's timeout-minutes — an overrun here kills the run before the issue is
+# created, which is worse than a noisy issue. A count cap was the wrong unit for
+# that (100 fast-failing URLs are cheap; 25 hung ones are not), and it had a real
+# cost: every URL the cap skips is reported as an error, manufacturing exactly the
+# false positives this script exists to remove. Whatever the budget does cut off is
+# logged by URL and stays in the report.
+#
+# The per-URL curl is deliberately impatient (--max-time 10 --retry 1): a host that
+# can't answer twice in 10s isn't going to pass, so worst case is ~24s per URL and
+# the budget covers ~25 pathologically slow URLs or several hundred fast-failing
+# ones. Note the budget is checked between URLs, so the step can overshoot it by at
+# most one URL's worth.
 #
 # Run resolve-cached-status.sh first: it turns "Error (cached)" into the real
 # underlying status, which makes the classification below accurate instead of
@@ -39,7 +50,7 @@ set -euo pipefail
 JSON_FILE="${1:?Usage: curl-retry-failures.sh <lychee.json> [patterns-file]}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PATTERNS_FILE="${2:-$SCRIPT_DIR/curl-retry-patterns.txt}"
-RETRY_MAX="${RETRY_MAX:-25}"
+RETRY_BUDGET_SECONDS="${RETRY_BUDGET_SECONDS:-600}"
 
 if [ ! -f "$JSON_FILE" ]; then
   echo "JSON file not found: $JSON_FILE" >&2
@@ -109,23 +120,36 @@ if [ -z "$CANDIDATES" ]; then
   exit 0
 fi
 
-CANDIDATE_COUNT=$(printf '%s\n' "$CANDIDATES" | grep -c . || true)
-RETRY_URLS=$(printf '%s\n' "$CANDIDATES" | head -n "$RETRY_MAX")
-if [ "$CANDIDATE_COUNT" -gt "$RETRY_MAX" ]; then
-  echo "WARNING: $CANDIDATE_COUNT retryable URL(s) exceeds RETRY_MAX=$RETRY_MAX. Not retried (still reported as errors):"
-  printf '%s\n' "$CANDIDATES" | tail -n +"$((RETRY_MAX + 1))" | sed 's/^/  SKIPPED: /'
-fi
+# Read candidates into an array so the budget check can report what it cut off.
+RETRY_URLS=()
+while IFS= read -r _url; do
+  [ -n "$_url" ] && RETRY_URLS+=("$_url")
+done <<< "$CANDIDATES"
 
-RETRY_COUNT=$(printf '%s\n' "$RETRY_URLS" | grep -c . || true)
-echo "Retrying $RETRY_COUNT URL(s) with curl..."
+RETRY_COUNT=${#RETRY_URLS[@]}
+echo "Retrying $RETRY_COUNT URL(s) with curl (budget: ${RETRY_BUDGET_SECONDS}s)..."
 
-# Retry each URL with curl and collect the ones that succeed
+# Retry each URL with curl and collect the ones that succeed, stopping when the
+# wall-clock budget runs out. SECONDS is bash's own elapsed-time counter, so this
+# needs no date arithmetic.
+RETRY_START=$SECONDS
 PASSED_URLS=()
-while IFS= read -r url; do
-  [ -z "$url" ] && continue
+for ((i = 0; i < RETRY_COUNT; i++)); do
+  url="${RETRY_URLS[i]}"
+
+  if [ $((SECONDS - RETRY_START)) -ge "$RETRY_BUDGET_SECONDS" ]; then
+    echo "WARNING: retry budget of ${RETRY_BUDGET_SECONDS}s exhausted after $i URL(s)." \
+         "Not retried (still reported as errors):"
+    for ((j = i; j < RETRY_COUNT; j++)); do
+      echo "  SKIPPED: ${RETRY_URLS[j]}"
+    done
+    break
+  fi
+
   # Strip fragment — curl doesn't check anchors
   url_no_frag="${url%%#*}"
-  if curl -sSf -o /dev/null -L --max-time 30 --retry 2 --retry-delay 3 \
+  # Impatient on purpose: a host that can't answer twice in 10s won't pass.
+  if curl -sSf -o /dev/null -L --max-time 10 --retry 1 --retry-delay 3 \
        -A "Mozilla/5.0 (compatible; solo-link-checker/1.0)" \
        "$url_no_frag" 2>/dev/null; then
     echo "  PASS: $url"
@@ -135,7 +159,9 @@ while IFS= read -r url; do
   fi
   # Be polite between requests
   sleep 1
-done <<< "$RETRY_URLS"
+done
+
+echo "Retry pass took $((SECONDS - RETRY_START))s."
 
 if [ ${#PASSED_URLS[@]} -eq 0 ]; then
   echo "All retried URLs still failed — JSON unchanged."
