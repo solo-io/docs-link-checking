@@ -315,6 +315,76 @@ if [ "${RAW_ERRORS:-0}" -gt 0 ]; then
   fi
 fi
 
+# Returns 0 if a path segment looks like a version: 1.2, 1.2.3, 1.2.x, v1.15.4,
+# or a dated docs snapshot (2026-07-28). A bare number (/docs/8/) is deliberately
+# NOT treated as a version, since that is more often a real page.
+is_version_segment() {
+  [[ "$1" =~ ^v?[0-9]+\.[0-9]+(\.[0-9]+)?(\.x)?$ ]] && return 0
+  [[ "$1" =~ ^v[0-9]+$ ]] && return 0
+  [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && return 0
+  return 1
+}
+
+# Returns 0 if the redirect is a version-pointer redirect: an unversioned or
+# /latest/ URL resolving to the same page under a version segment. Sites that do
+# this include docs.solo.io (/istio/latest/ → /istio/1.30.x/), jaegertracing.io
+# (/docs/latest/ → /docs/2.20/), and modelcontextprotocol.io (/docs/tools/inspector
+# → /docs/2026-07-28/tools/inspector). Keeping the source URL is intentional
+# because it auto-tracks the current version, so the redirect is expected forever
+# and reporting it is pure noise.
+#
+# Deliberately narrow: the host must be unchanged and the path must differ by
+# exactly one version segment, either substituted for "latest" or inserted. A
+# renamed page, a moved domain, a login redirect, or a version-to-version bump
+# (1.2 → 1.3, which is a stale pin worth fixing) all still get reported. A URL
+# that is genuinely gone still 404s, which is an error rather than a redirect.
+is_version_pointer_redirect() {
+  local o="${1#*://}" f="${2#*://}"
+  o="${o%%\?*}"; f="${f%%\?*}"
+  o="${o%/}"; f="${f%/}"
+
+  local -a os fs
+  IFS='/' read -r -a os <<< "$o"
+  IFS='/' read -r -a fs <<< "$f"
+
+  # Index 0 is the host. A host change is a real move, not a version pointer.
+  [ "${os[0]}" = "${fs[0]}" ] || return 1
+
+  local n=${#os[@]} m=${#fs[@]} i j
+  if [ "$m" -eq "$n" ]; then
+    # Substitution: /latest/ (or /stable/, /current/) replaced by a version.
+    local diff=-1
+    for ((i = 0; i < n; i++)); do
+      if [ "${os[i]}" != "${fs[i]}" ]; then
+        [ "$diff" -ge 0 ] && return 1
+        diff=$i
+      fi
+    done
+    [ "$diff" -lt 0 ] && return 1
+    case "${os[diff]}" in
+      latest|stable|current) ;;
+      *) return 1 ;;
+    esac
+    is_version_segment "${fs[diff]}"
+    return $?
+  elif [ "$m" -eq "$((n + 1))" ]; then
+    # Insertion: a version segment added, the rest of the path unchanged.
+    for ((i = 0; i < n; i++)); do
+      if [ "${os[i]}" != "${fs[i]}" ]; then
+        is_version_segment "${fs[i]}" || return 1
+        for ((j = i; j < n; j++)); do
+          [ "${os[j]}" = "${fs[j + 1]}" ] || return 1
+        done
+        return 0
+      fi
+    done
+    # Version segment appended at the end (/specification → /specification/2025-11-25).
+    is_version_segment "${fs[n]}"
+    return $?
+  fi
+  return 1
+}
+
 # Returns 0 (skip) if the redirect is caused by a known ignorable server-side pattern.
 skip_redirect() {
   local original="$1" final="$2"
@@ -353,19 +423,9 @@ skip_redirect() {
     && [[ "$final_lower" == *"raw.githubusercontent.com/"* ]] \
     && return 0
 
-  # Solo cross-product /latest/ link resolving to a specific version
-  # (docs.solo.io/<product>/latest/<rest> → /<product>/<X.Y.x>/<rest>). Using
-  # /latest/ is intentional (auto-tracks the newest version), so this exact
-  # redirect is expected. Skip ONLY when the target segment is a real version
-  # (X.Y.x) AND the rest of the path is unchanged — so a /latest/ link that
-  # redirects somewhere else (login, a renamed path, etc.) is still reported,
-  # and a genuinely broken /latest/<page> still errors (404, not a redirect).
-  if [[ "$orig_lower" =~ docs\.solo\.io/([^/]+)/latest/(.*)$ ]]; then
-    local _prod="${BASH_REMATCH[1]}" _rest="${BASH_REMATCH[2]}"
-    if [[ "$final_lower" =~ docs\.solo\.io/${_prod}/[0-9]+\.[0-9]+\.x/(.*)$ ]]; then
-      [ "${BASH_REMATCH[1]}" = "$_rest" ] && return 0
-    fi
-  fi
+  # Version-pointer redirect (docs.solo.io/<product>/latest/, jaegertracing.io
+  # /docs/latest/, modelcontextprotocol.io/docs/ → dated snapshot, and so on).
+  is_version_pointer_redirect "$orig_lower" "$final_lower" && return 0
 
   # Go vanity import path redirecting to its GitHub repo (e.g.
   # sigs.k8s.io/gateway-api → github.com/kubernetes-sigs/gateway-api). The
