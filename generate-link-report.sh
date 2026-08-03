@@ -80,6 +80,15 @@ if [ ! -f "$JSON_FILE" ]; then
   exit 1
 fi
 
+# Fold timed-out checks into error_map. Lychee keeps them in a separate
+# timeout_map that the report never read, so a URL that timed out on a single page
+# was reported nowhere at all. See fold-timeouts.sh.
+FOLD_SCRIPT="$SCRIPT_DIR/fold-timeouts.sh"
+if [ -f "$FOLD_SCRIPT" ]; then
+  chmod +x "$FOLD_SCRIPT"
+  "$FOLD_SCRIPT" "$JSON_FILE" || true
+fi
+
 # Resolve lychee's "Error (cached)" placeholder into the real underlying status
 # (timeout, 404, fragment, ...). Lychee checks each URL once per run and reports
 # every later occurrence as a bare cached error, which is both untriageable in the
