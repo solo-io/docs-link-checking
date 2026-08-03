@@ -80,10 +80,20 @@ if [ ! -f "$JSON_FILE" ]; then
   exit 1
 fi
 
+# Resolve lychee's "Error (cached)" placeholder into the real underlying status
+# (timeout, 404, fragment, ...). Lychee checks each URL once per run and reports
+# every later occurrence as a bare cached error, which is both untriageable in the
+# report and unclassifiable by the retry step below. See resolve-cached-status.sh.
+RESOLVE_SCRIPT="$SCRIPT_DIR/resolve-cached-status.sh"
+if [ -f "$RESOLVE_SCRIPT" ]; then
+  chmod +x "$RESOLVE_SCRIPT"
+  "$RESOLVE_SCRIPT" "$JSON_FILE" || true
+fi
+
 # Retry flaky failures with curl before generating the report.
-# Domains in curl-retry-patterns.txt are known to drop connections under CI
-# load but respond fine to a single curl request. This removes false positives
-# from the JSON before we count errors.
+# Failures whose status looks transient (timeout, dropped connection, 429), plus
+# any URL matching curl-retry-patterns.txt, are re-checked with a single curl
+# request. This removes false positives from the JSON before we count errors.
 RETRY_SCRIPT="$SCRIPT_DIR/curl-retry-failures.sh"
 if [ -x "$RETRY_SCRIPT" ] || [ -f "$RETRY_SCRIPT" ]; then
   chmod +x "$RETRY_SCRIPT"

@@ -1,6 +1,10 @@
-# Domains that frequently drop connections when hit by lychee in CI but
-# respond fine to a single curl request. URLs matching these patterns are
-# retried with curl before being included in the error report.
+# Supplementary retry list. curl-retry-failures.sh already retries any failure
+# whose status looks transient (timeout, dropped connection, DNS error, 429,
+# cached placeholder), on any domain, so slow hosts no longer need an entry here.
+#
+# Add a domain only for hosts that answer lychee with a *stable* failure that a
+# plain curl request passes — typically a bot-block or an odd status code, which
+# status-class matching can't recognize as transient.
 #
 # One grep -E pattern per line. Blank lines and # comments are ignored.
 
