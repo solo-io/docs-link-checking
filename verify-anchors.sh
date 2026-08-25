@@ -11,6 +11,9 @@
 #     (for example legal.solo.io, a Next.js SPA)
 #   - an `id="..."` that is injected by JavaScript at runtime and so is absent
 #     from the static HTML lychee parses
+#   - a hash that is a client-side *route* rather than an element id, so it never
+#     matches any id even after a full render (Swagger UI: the link is
+#     #/<tag>/<operationId>, the element is id="operations-<tag>-<operationId>")
 # For those pages lychee reports "Cannot find fragment" even though the anchor
 # works in a browser. This script re-checks each fragment warning against the
 # page as a browser would see it and removes the confirmed-good ones from the
@@ -89,16 +92,48 @@ fetch_dom() {
     -A "Mozilla/5.0 (compatible; solo-link-checker/1.0)" "$url" 2>/dev/null
 }
 
+# Swagger UI is a special case that a browser render alone cannot settle: the URL
+# hash is a client-side route, not an element id, so the two strings never match.
+# Swagger UI renders an operation as id="operations-<tag>-<operationId>" while
+# linking to it as #/<tag>/<operationId>, and a tag section as
+# id="operations-tag-<tag>" for #/<tag>. Map the route back to the ids Swagger UI
+# actually emits so those anchors can be verified instead of excluded by domain.
+#
+# Only a fragment shaped like a Swagger route (leading /, at most two segments)
+# produces candidates, so ordinary anchors are unaffected. A candidate is still
+# only accepted if it is really present in the fetched DOM — a renamed or removed
+# operation produces no match and stays in the report.
+swagger_id_candidates() {
+  local frag="$1"
+  case "$frag" in
+    /*) ;;
+    *) return 0 ;;
+  esac
+  local path="${frag#/}"
+  case "$path" in
+    */*/*) return 0 ;;                                  # deeper than tag/operation: not a Swagger route
+    */*) printf 'operations-%s-%s\n' "${path%%/*}" "${path#*/}" ;;
+    ?*)  printf 'operations-tag-%s\n' "$path" ;;
+  esac
+}
+
 # A fragment resolves if it appears as id/name/data-key/data-ks-path (double or
 # single quoted). data-key covers SPA scroll targets (legal.solo.io); data-ks-path
 # covers the kubespec tree widget. grep -F keeps regex-special fragment chars safe.
 frag_in_dom() {
-  local file="$1" frag="$2" attr
-  for attr in 'id' 'name' 'data-key' 'data-ks-path'; do
-    if grep -qF "$attr=\"$frag\"" "$file" 2>/dev/null \
-       || grep -qF "$attr='$frag'" "$file" 2>/dev/null; then
-      return 0
-    fi
+  local file="$1" frag="$2" attr cand
+  local -a cands=("$frag")
+  while IFS= read -r cand; do
+    [ -n "$cand" ] && cands+=("$cand")
+  done < <(swagger_id_candidates "$frag")
+
+  for cand in "${cands[@]}"; do
+    for attr in 'id' 'name' 'data-key' 'data-ks-path'; do
+      if grep -qF "$attr=\"$cand\"" "$file" 2>/dev/null \
+         || grep -qF "$attr='$cand'" "$file" 2>/dev/null; then
+        return 0
+      fi
+    done
   done
   return 1
 }

@@ -41,6 +41,7 @@ exclude = [
   # External services that block or rate-limit link checkers
   ".*api\\.ai\\.prod\\.eu-central-1\\.aws\\.ml\\.hana\\.ondemand\\.com.*",
   ".*app\\.excalidraw.*",
+  "^https?://devin\\.ai/desktop$",                    # marketing page returns 429 to checkers; docs.devin.ai is not excluded and still checked
   ".*docs\\.vllm\\.ai.*",
   ".*management\\.azure\\.com.*",
   ".*storage\\.googleapis.*",
@@ -71,16 +72,20 @@ exclude = [
   # so broad per-domain excludes would hide real broken anchors.
   "^https?://kubernetes\\.io/docs/tasks/tools/#",                              # tab-rendered tool anchors
   "^https?://console\\.aws\\.amazon\\.com/.+#/",                               # AWS console SPA hash routing
+  "reference/api-kubespec/(policies|backends|parameters)/?#",                  # agentgateway CRD kubespec widget: dotted-path fragments (e.g. #spec.backend.auth.jwtSign) live in a data-ks-path attribute and are resolved client-side via location.hash + a lookup table (selectHashTarget), not a static id="..." lychee's parser can see
 
   # Always-redirecting URLs that are intentionally short-form / canonical:
   # we want to keep the source URL because it auto-resolves to the latest target.
   "^https?://github\\.com/[^/]+/[^/]+/releases/latest$",  # always redirects to current release tag
   "^https?://discord\\.gg/",                              # canonical short form, redirects to discord.com/invite/
   "^https?://github\\.com/user-attachments/assets/",      # redirects to time-limited S3 signed URLs
+  "^https?://github\\.com/[^/]+\\.png$",                  # GitHub user avatar short form (e.g. /craigbox.png), redirects to the avatars CDN URL, which embeds a numeric user ID and a version query that both change when the user updates their avatar
   "^https?://slack\\.cncf\\.io/",                         # CNCF Slack canonical invite, redirects to communityinviter
   "^https?://cloud-native\\.slack\\.com/archives/",       # Slack channel links redirect to a login/auth page
+  "^https?://git\\.k8s\\.io/",                            # Kubernetes vanity redirector: every path 302s to github.com/kubernetes/<repo>/blob/main/. These URLs come from k8s.io/apimachinery TypeMeta godoc, so every CRD reference regeneration reintroduces them across agentgateway, kgateway, kagent, and the hub. Excluded rather than rewritten because the short form survives default-branch renames (master -> main already broke the pinned form once), and a stale blob/main URL 404s, which is worse than a redirect
   "^https?://agentgateway\\.dev/schema/config$",          # canonical short form used in $schema config examples, redirects to raw.githubusercontent config.json
   "^https?://modelcontextprotocol\\.io/specification$",   # canonical "current spec" pointer, redirects to the latest dated spec (e.g. /specification/2025-11-25)
+  "^https?://modelcontextprotocol\\.io/?$",               # site root, redirects to the latest dated docs intro (e.g. /docs/2026-07-28/getting-started/intro); the root is the stable form to cite
   "^https?://docs\\.crewai\\.com/[a-z]{2}/",              # version-less docs URL (lang-first, e.g. /en/) redirects to the current version (e.g. /v1.15.4/en/); versioned URLs are NOT excluded so stale pins still get flagged
 
   # Theme logo link (relLangURL "") produces a relative href like "agentgateway/"
