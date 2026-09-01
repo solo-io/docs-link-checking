@@ -50,6 +50,7 @@ exclude = [
   "https?://console.mistral.ai/",
   "https?://slack.solo.io/",
   "https://www.linkedin.com/*",
+  "^https?://console\\.cloud\\.google\\.com/marketplace/",  # Google Cloud Marketplace listings load fine in a browser and return 200 to curl, but lychee's HTTP/2 client gets a protocol error against this host
 
   # Open Source Attribution: Go module URLs (pkg.go.dev), not HTTP docs
   "https?://istio\\.io/(api|client-go|istio)",
@@ -73,6 +74,7 @@ exclude = [
   "^https?://kubernetes\\.io/docs/tasks/tools/#",                              # tab-rendered tool anchors
   "^https?://console\\.aws\\.amazon\\.com/.+#/",                               # AWS console SPA hash routing
   "reference/api-kubespec/(policies|backends|parameters)/?#",                  # agentgateway CRD kubespec widget: dotted-path fragments (e.g. #spec.backend.auth.jwtSign) live in a data-ks-path attribute and are resolved client-side via location.hash + a lookup table (selectHashTarget), not a static id="..." lychee's parser can see
+  "^https?://learn\\.chatgpt\\.com/docs/.+#",                                  # OpenAI/Codex docs ship heading IDs as unresolved i18n placeholders in static HTML (id="__codexlocalizedvalueprops__codextranslations-u0102-alternative-model-providers") and rewrite them to the clean slug at runtime; the site's own internal links use the clean form, so the anchors are correct and only lychee's static parser disagrees
 
   # Always-redirecting URLs that are intentionally short-form / canonical:
   # we want to keep the source URL because it auto-resolves to the latest target.
@@ -105,6 +107,28 @@ exclude = [
 exclude_path = [
   ".*categories/index.html",
   ".*tags/index.html",
+  # PDF-export book documents. `book.html` is not a page anyone visits: it is the
+  # intermediate the PDF pipeline stitches every page of a version tree into, and
+  # its links are REWRITTEN by docs-theme-extras' scripts/prepare_book.py before
+  # the PDF is rendered. Checking it at build time therefore checks a link state
+  # that never ships, and gets two things wrong:
+  #
+  #   - RELATIVE links resolve from the wrong place. A chapter authored at
+  #     /kagent/latest/support/x/ may link "../build", which is correct there and
+  #     resolves to /kagent/build from book.html, one directory shallower. That is
+  #     the exact mistake prepare_book.py is written to avoid — it resolves each
+  #     href against the chapter's own data-source-path, not against book.html.
+  #     Four such false errors per product on the run that prompted this.
+  #   - Every PRE-EXISTING broken link in the tree gets re-reported with
+  #     book.html added as a source, because the book contains every page. That
+  #     does not raise the error count, but it pads the report and makes a real
+  #     regression harder to spot.
+  #
+  # The PDF's links are not going unchecked: prepare_book.py --strict fails on a
+  # dangling jump, and merge_book.py fails on any cross-reference that resolves
+  # to nothing, so the artifact readers actually download is verified by the
+  # export workflow itself.
+  ".*/book\\.html",
 ]
 
 # Exclude all private IPs (localhost, 127.0.0.1, etc.)
