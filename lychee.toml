@@ -15,6 +15,14 @@ exclude = [
   ".*another\\.(com|org)",
   "https?://example\\.com.*",
   "https?://localhost.*",
+  # Endpoint VALUES quoted as examples in generated CRD field docs ("e.g.,
+  # https://..."), which lychee auto-links in a markdown output. Service roots
+  # rather than pages, and neither domain hosts documentation: "my-account" and
+  # "tenant" are placeholder subdomains, and SAP publishes to help.sap.com, not
+  # hana.ondemand.com. The Azure one arrives as .../%29 because the closing paren
+  # of the "(e.g., ...)" is swallowed into the auto-link.
+  "^https?://my-account\\.cognitiveservices\\.azure\\.com",
+  "^https?://[^/]*\\.hana\\.ondemand\\.com",
 
   # CI build paths (Hugo sometimes embeds workspace paths in asset URLs)
   # Only excludes http(s) URLs — file:// URLs are lychee's local link resolution and should be checked
@@ -33,6 +41,7 @@ exclude = [
   # Example config values (not real URLs)
   "https?://istiod.istio-system.svc:15012",
   "https?://proxy\\.kagent\\.svc\\.cluster\\.local:8080",
+  "^https?://kagent-ui:8080",   # in-cluster Service URL; an oauth2-proxy env default in kagent's generated Helm values table
   "https?://thanos-querier\\.openshift-monitoring\\.svc[^/]*",
 
   # Product deployments
@@ -75,6 +84,7 @@ exclude = [
   "^https?://console\\.aws\\.amazon\\.com/.+#/",                               # AWS console SPA hash routing
   "reference/api-kubespec/(policies|backends|parameters)/?#",                  # agentgateway CRD kubespec widget: dotted-path fragments (e.g. #spec.backend.auth.jwtSign) live in a data-ks-path attribute and are resolved client-side via location.hash + a lookup table (selectHashTarget), not a static id="..." lychee's parser can see
   "^https?://learn\\.chatgpt\\.com/docs/.+#",                                  # OpenAI/Codex docs ship heading IDs as unresolved i18n placeholders in static HTML (id="__codexlocalizedvalueprops__codextranslations-u0102-alternative-model-providers") and rewrite them to the clean slug at runtime; the site's own internal links use the clean form, so the anchors are correct and only lychee's static parser disagrees
+  "^https?://kubernetes\\.io/docs/reference/generated/kubernetes-api/v[0-9.]+/#",  # generated Kubernetes API reference: field anchors are built client-side, so #duration-v1-meta appears as neither an id nor an href anywhere in the 6.6MB static page. Reached by every crd-ref-docs page documenting an ObjectMeta or Duration field, so kagent and kmcp both report it. Versioned upstream, hence the v[0-9.]+
 
   # Always-redirecting URLs that are intentionally short-form / canonical:
   # we want to keep the source URL because it auto-resolves to the latest target.
