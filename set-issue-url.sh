@@ -5,8 +5,12 @@
 set -euo pipefail
 
 if [ -n "${ISSUE_NUMBER:-}" ]; then
-  echo "issue_url=https://github.com/${REPOSITORY}/issues/${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
-  echo "issue_line=Issue: <https://github.com/${REPOSITORY}/issues/${ISSUE_NUMBER}|View issue>" >> "$GITHUB_OUTPUT"
+  ISSUE_URL="https://github.com/${REPOSITORY}/issues/${ISSUE_NUMBER}"
+  echo "issue_url=${ISSUE_URL}" >> "$GITHUB_OUTPUT"
+
+  # Appended to the Slack line when the project update fails, so a silent
+  # board failure is visible where the results are actually read.
+  PROJECT_NOTE=""
 
   # Apply labels if provided. Retry up to 3 times to handle GitHub GraphQL
   # eventual-consistency lag after issue creation via the REST API.
@@ -42,7 +46,8 @@ if [ -n "${ISSUE_NUMBER:-}" ]; then
   # Wrapped with `set +e` so a missing/under-scoped project token cannot abort the step.
   if [ -n "${PRODUCT:-}" ]; then
     if [ -z "${GH_PROJECT_TOKEN:-}" ]; then
-      echo "Warning: GH_PROJECT_TOKEN is empty; project update will likely fail (needs 'read:project' scope). Skipping."
+      echo "::error::GH_PROJECT_TOKEN is empty, so issue #${ISSUE_NUMBER} was not added to the board and has no Product set. The token needs the 'project' scope."
+      PROJECT_NOTE=" · :warning: not added to the board"
     else
       # GitHub Projects V2 requires the OAuth 'project' scope; use GH_PROJECT_TOKEN if provided
       export GH_TOKEN="$GH_PROJECT_TOKEN"
@@ -76,16 +81,35 @@ if [ -n "${ISSUE_NUMBER:-}" ]; then
         | jq -r --arg p "$PRODUCT" \
             '[.data.organization.projectV2.fields.nodes[]? | select(.name == "Product") | .options[]? | select(.name == $p)][0].id // empty')
 
-      ITEM_ADD_ERR=$(mktemp)
-      ITEM_JSON=$(gh project item-add "$PROJECT_NUMBER" --owner "$PROJECT_ORG" \
-        --url "https://github.com/${REPOSITORY}/issues/${ISSUE_NUMBER}" \
-        --format json 2>"$ITEM_ADD_ERR" || echo '{}')
-      ITEM_ID=$(echo "$ITEM_JSON" | jq -r '.id // empty')
-      if [ -z "$ITEM_ID" ] && [ -s "$ITEM_ADD_ERR" ]; then
-        echo "gh project item-add stderr:"
-        cat "$ITEM_ADD_ERR"
+      # Add the issue by node ID.
+      #
+      # Deliberately NOT `gh project item-add --owner`: that subcommand first
+      # resolves the owner login to a user or an organization, and that lookup
+      # started returning "unknown owner type" on 2026-08-25 while every other
+      # project call with the same token kept working. The failure was silent,
+      # so eight weekly reports landed on the board with no Product set and the
+      # runs still reported success. Calling the mutation directly skips owner
+      # resolution. It is also idempotent: an issue already on the board
+      # returns its existing item ID.
+      ISSUE_NODE_ID=$(gh api graphql -F number="$ISSUE_NUMBER" \
+        -f owner="${REPOSITORY%%/*}" -f repo="${REPOSITORY##*/}" -f query='
+        query($owner: String!, $repo: String!, $number: Int!) {
+          repository(owner: $owner, name: $repo) {
+            issue(number: $number) { id }
+          }
+        }
+      ' | jq -r '.data.repository.issue.id // empty')
+
+      ITEM_ID=""
+      if [ -n "$ISSUE_NODE_ID" ] && [ -n "$PROJECT_ID" ]; then
+        ITEM_ID=$(gh api graphql -f projectId="$PROJECT_ID" -f contentId="$ISSUE_NODE_ID" -f query='
+          mutation($projectId: ID!, $contentId: ID!) {
+            addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+              item { id }
+            }
+          }
+        ' | jq -r '.data.addProjectV2ItemById.item.id // empty')
       fi
-      rm -f "$ITEM_ADD_ERR"
 
       if [ -n "$ITEM_ID" ] && [ -n "$PROJECT_ID" ] && [ -n "$FIELD_ID" ] && [ -n "$OPTION_ID" ]; then
         gh api graphql -f query='
@@ -99,16 +123,25 @@ if [ -n "${ISSUE_NUMBER:-}" ]; then
               projectV2Item { id }
             }
           }
-        ' -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$FIELD_ID" -f optionId="$OPTION_ID" \
-          && echo "Added issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER} with Product: ${PRODUCT}"
+        ' -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$FIELD_ID" -f optionId="$OPTION_ID"
+        if [ $? -eq 0 ]; then
+          echo "Added issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER} with Product: ${PRODUCT}"
+        else
+          echo "::error::Added issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER}, but setting Product=${PRODUCT} failed."
+          PROJECT_NOTE=" · :warning: Product not set"
+        fi
       elif [ -n "$ITEM_ID" ]; then
-        echo "Added issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER} (Product option '${PRODUCT}' not found or project metadata unavailable; field not set)"
+        echo "::error::Added issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER}, but Product option '${PRODUCT}' was not found in the project's Product field. The field is unset."
+        PROJECT_NOTE=" · :warning: Product not set"
       else
-        echo "Warning: could not add issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER}"
+        echo "::error::Could not add issue #${ISSUE_NUMBER} to project ${PROJECT_NUMBER}. Check that DOCS_TOKEN still has project access."
+        PROJECT_NOTE=" · :warning: not added to the board"
       fi
       set -e
     fi
   fi
+
+  echo "issue_line=Issue: <${ISSUE_URL}|View issue>${PROJECT_NOTE}" >> "$GITHUB_OUTPUT"
 else
   echo "issue_url=" >> "$GITHUB_OUTPUT"
   echo "issue_line=" >> "$GITHUB_OUTPUT"
