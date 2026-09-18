@@ -420,6 +420,26 @@ skip_redirect() {
   final_base="${final%%\?*}"
   [[ "$final" == *"?"* ]] && [ "$orig_base" = "$final_base" ] && return 0
 
+  # Auth gate that bounces to a separate sign-in host, carrying the original
+  # URL back as a return parameter (app.axiom.co/ -> auth.axiom.co/?return_to=
+  # https%3A%2F%2Fapp.axiom.co%2F). The rule above does not catch these because
+  # the host changes, and the login/signin rule below does not either because
+  # the sign-in host is named something else ("auth", "accounts", "id").
+  #
+  # The round-trip parameter is the evidence: a host that hands the original URL
+  # back to itself is gating it, not replacing it, so the source URL is correct
+  # for a logged-in reader and only an anonymous checker ever sees the hop. A
+  # genuine move has no reason to embed the URL it moved away from, so this stays
+  # narrow: the decoded value has to equal the original, not merely contain it.
+  local _rk _rq _rdec
+  for _rk in return_to returnto return_url returnurl redirect_uri redirect_to redirecturi next continue; do
+    _rq=$(printf '%s' "$final_lower" | sed -n "s/.*[?&]${_rk}=\([^&]*\).*/\1/p")
+    [ -n "$_rq" ] || continue
+    # URL-decode: %3A -> \x3A -> ':' via printf %b.
+    _rdec=$(printf '%b' "${_rq//%/\\x}" 2>/dev/null) || continue
+    [ "${_rdec%/}" = "${orig_lower%/}" ] && return 0
+  done
+
   # Locale redirect: en_us or en-us in redirect but not original
   [[ "$final_lower" == *"en_us"* ]] && [[ "$orig_lower" != *"en_us"* ]] && return 0
   [[ "$final_lower" == *"en-us"* ]] && [[ "$orig_lower" != *"en-us"* ]] && return 0
