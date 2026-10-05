@@ -94,6 +94,7 @@ exclude = [
   "^https?://github\\.com/[^/]+\\.png$",                  # GitHub user avatar short form (e.g. /craigbox.png), redirects to the avatars CDN URL, which embeds a numeric user ID and a version query that both change when the user updates their avatar
   "^https?://slack\\.cncf\\.io/",                         # CNCF Slack canonical invite, redirects to communityinviter
   "^https?://cloud-native\\.slack\\.com/archives/",       # Slack channel links redirect to a login/auth page
+  "^https?://manage\\.auth0\\.com/",                     # Auth0 dashboard, redirects to a login page
   "^https?://git\\.k8s\\.io/",                            # Kubernetes vanity redirector: every path 302s to github.com/kubernetes/<repo>/blob/main/. These URLs come from k8s.io/apimachinery TypeMeta godoc, so every CRD reference regeneration reintroduces them across agentgateway, kgateway, kagent, and the hub. Excluded rather than rewritten because the short form survives default-branch renames (master -> main already broke the pinned form once), and a stale blob/main URL 404s, which is worse than a redirect
   "^https?://agentgateway\\.dev/schema/config$",          # canonical short form used in $schema config examples, redirects to raw.githubusercontent config.json
   "^https?://agentgateway\\.dev/model-catalog$",          # same class as /schema/config: the short form is what the docs and the `agctl catalog import --source github` default both cite, and it redirects to the raw.githubusercontent catalog JSON
