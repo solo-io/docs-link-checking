@@ -60,6 +60,12 @@ exclude = [
   "https?://slack.solo.io/",
   "https://www.linkedin.com/*",
   "^https?://console\\.cloud\\.google\\.com/marketplace/",  # Google Cloud Marketplace listings load fine in a browser and return 200 to curl, but lychee's HTTP/2 client gets a protocol error against this host
+  "^https?://ollama\\.com/settings/keys$",             # auth-gated key page; returns 400 to a plain checker
+
+  # API endpoints printed as text in generated reference tables (default base URLs
+  # for a provider). Lychee auto-links the bare URL in the markdown output; an API
+  # root is not a browsable page and answers 404.
+  "^https?://api\\.mistral\\.ai/",
 
   # Open Source Attribution: Go module URLs (pkg.go.dev), not HTTP docs
   "https?://istio\\.io/(api|client-go|istio)",
@@ -85,6 +91,9 @@ exclude = [
   "reference/api-kubespec/(policies|backends|parameters)/?#",                  # agentgateway CRD kubespec widget: dotted-path fragments (e.g. #spec.backend.auth.jwtSign) live in a data-ks-path attribute and are resolved client-side via location.hash + a lookup table (selectHashTarget), not a static id="..." lychee's parser can see
   "^https?://learn\\.chatgpt\\.com/docs/.+#",                                  # OpenAI/Codex docs ship heading IDs as unresolved i18n placeholders in static HTML (id="__codexlocalizedvalueprops__codextranslations-u0102-alternative-model-providers") and rewrite them to the clean slug at runtime; the site's own internal links use the clean form, so the anchors are correct and only lychee's static parser disagrees
   "^https?://kubernetes\\.io/docs/reference/generated/kubernetes-api/v[0-9.]+/#",  # generated Kubernetes API reference: field anchors are built client-side, so #duration-v1-meta appears as neither an id nor an href anywhere in the 6.6MB static page. Reached by every crd-ref-docs page documenting an ObjectMeta or Duration field, so kagent and kmcp both report it. Versioned upstream, hence the v[0-9.]+
+  "^https?://docs\\.aws\\.amazon\\.com/eks/latest/userguide/eks-add-ons\\.html#(updating|removing)-an-add-on$",  # EKS add-ons guide: JS-rendered tab anchors
+  "^https?://cloud\\.google\\.com/kubernetes-engine/docs/how-to/workload-identity#enable$",                      # GKE workload identity: JS-rendered anchor
+  "^https?://docs\\.openshift\\.com/.*/managing-alerts\\.html#creating-alerting-rules-for-user-defined-projects_managing-alerts$",  # OpenShift alerts: JS-rendered anchor
 
   # Always-redirecting URLs that are intentionally short-form / canonical:
   # we want to keep the source URL because it auto-resolves to the latest target.
@@ -103,6 +112,9 @@ exclude = [
   "^https?://modelcontextprotocol\\.io/specification$",   # canonical "current spec" pointer, redirects to the latest dated spec (e.g. /specification/2025-11-25)
   "^https?://modelcontextprotocol\\.io/?$",               # site root, redirects to the latest dated docs intro (e.g. /docs/2026-07-28/getting-started/intro); the root is the stable form to cite
   "^https?://docs\\.crewai\\.com/[a-z]{2}/",              # version-less docs URL (lang-first, e.g. /en/) redirects to the current version (e.g. /v1.15.4/en/); versioned URLs are NOT excluded so stale pins still get flagged
+  "^https?://github\\.com/[^/]+/[^/]+\\.git$",             # clone URL in a git command; the .git suffix is required
+  "^https?://agentclientprotocol\\.com/?$",                # home page, redirects to the docs intro
+  "^https?://modelcontextprotocol\\.io/docs/getting-started/",  # unversioned path, redirects to the current dated snapshot
 
   # Theme logo link (relLangURL "") produces a relative href like "agentgateway/"
   # which lychee resolves to a path ending in the bare product name. This also
