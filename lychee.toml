@@ -61,6 +61,7 @@ exclude = [
   "https://www.linkedin.com/*",
   "^https?://console\\.cloud\\.google\\.com/marketplace/",  # Google Cloud Marketplace listings load fine in a browser and return 200 to curl, but lychee's HTTP/2 client gets a protocol error against this host
   "^https?://ollama\\.com/settings/keys$",             # auth-gated key page; returns 400 to a plain checker
+  "^https?://www\\.hashicorp\\.com/",                  # returns 429 to curl and lychee on the first request, so every hashicorp.com link fails in CI; the pages load in a browser
 
   # API endpoints printed as text in generated reference tables (default base URLs
   # for a provider). Lychee auto-links the bare URL in the markdown output; an API
@@ -115,6 +116,8 @@ exclude = [
   "^https?://github\\.com/[^/]+/[^/]+\\.git$",             # clone URL in a git command; the .git suffix is required
   "^https?://agentclientprotocol\\.com/?$",                # home page, redirects to the docs intro
   "^https?://modelcontextprotocol\\.io/docs/getting-started/",  # unversioned path, redirects to the current dated snapshot
+  "^https?://wa\\.me/",                                   # WhatsApp share link from the blog share buttons; wa.me is the form WhatsApp documents, and it redirects to api.whatsapp.com/send with extra params. One redirect per blog post otherwise
+  "^https?://forms\\.gle/",                               # Google Forms short link (survey banners); redirects to the long docs.google.com/forms/d/e/<id>/viewform URL, which is what Google hands out as the share link
 
   # Theme logo link (relLangURL "") produces a relative href like "agentgateway/"
   # which lychee resolves to a path ending in the bare product name. This also
