@@ -23,6 +23,10 @@ exclude = [
   # of the "(e.g., ...)" is swallowed into the auto-link.
   "^https?://my-account\\.cognitiveservices\\.azure\\.com",
   "^https?://[^/]*\\.hana\\.ondemand\\.com",
+  # crd-ref-docs links an anonymous struct's "Underlying type" to an anchor such
+  # as #struct{endpoint-string-...}, but never writes a section for that type,
+  # so the fragment cannot resolve in any generated API reference.
+  "(?i)#struct(%7b|\\{)",
 
   # CI build paths (Hugo sometimes embeds workspace paths in asset URLs)
   # Only excludes http(s) URLs — file:// URLs are lychee's local link resolution and should be checked
