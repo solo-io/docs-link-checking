@@ -105,7 +105,7 @@ exclude = [
   "^https?://github\\.com/[^/]+/[^/]+/releases/latest$",  # always redirects to current release tag
   "^https?://discord\\.gg/",                              # canonical short form, redirects to discord.com/invite/
   "^https?://github\\.com/user-attachments/assets/",      # redirects to time-limited S3 signed URLs
-  "^https?://github\\.com/[^/]+\\.png$",                  # GitHub user avatar short form (e.g. /craigbox.png), redirects to the avatars CDN URL, which embeds a numeric user ID and a version query that both change when the user updates their avatar
+  "^https?://github\\.com/[^/]+\\.png(\\?.*)?$",          # GitHub user avatar short form (e.g. /craigbox.png, or /craigbox.png?size=96 in release blog contributor grids), redirects to the avatars CDN URL, which embeds a numeric user ID and a version query that both change when the user updates their avatar
   "^https?://slack\\.cncf\\.io/",                         # CNCF Slack canonical invite, redirects to communityinviter
   "^https?://cloud-native\\.slack\\.com/archives/",       # Slack channel links redirect to a login/auth page
   "^https?://manage\\.auth0\\.com/",                     # Auth0 dashboard, redirects to a login page
