@@ -184,9 +184,19 @@ if [ -n "$FRAG_URLS" ]; then
     base="${url%%#*}"
     frag_decoded=$(decode_frag "${url#*#}")
 
-    cache_key=$(printf '%s' "$base" | tr -c '[:alnum:]' '_')
+    # Render a Swagger route with its hash. Swagger UI often starts with every tag
+    # collapsed (httpbin.org does), and an operation's id="operations-<tag>-<op>"
+    # exists only once its tag is expanded. Loading the page at #/<tag>/<op> makes
+    # Swagger UI's deep linking expand that tag, so the id is in the dumped DOM.
+    # Other anchors keep sharing one render per page.
+    fetch_url="$base"
+    if [ -n "$BROWSER" ] && [ -n "$(swagger_id_candidates "$frag_decoded")" ]; then
+      fetch_url="$url"
+    fi
+
+    cache_key=$(printf '%s' "$fetch_url" | tr -c '[:alnum:]' '_')
     dom_file="$CACHE_DIR/$cache_key.html"
-    [ -f "$dom_file" ] || fetch_dom "$base" > "$dom_file" || true
+    [ -f "$dom_file" ] || fetch_dom "$fetch_url" > "$dom_file" || true
 
     if frag_in_dom "$dom_file" "$frag_decoded"; then
       echo "  RESOLVED: $url"

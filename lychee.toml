@@ -137,6 +137,17 @@ exclude = [
 
 
 
+# Remaps for URLs whose #fragment is page STATE, not an anchor. The page script reads
+# the hash, so no element ever has that id, not even after a browser render, and
+# verify-anchors.sh cannot confirm it. Stripping the fragment keeps checking that the
+# page itself loads, which an exclude would stop doing. The action's own --remap flags
+# still apply alongside these (checked with lychee 0.24.2).
+remap = [
+  # FIRST CVSS calculator: #CVSS:3.1/AV:N/... is the vector the calculator loads.
+  # Istio security advisories in the Solo Istio changelogs link one per CVE.
+  "^(https://www\\.first\\.org/cvss/calculator/[0-9.]+/?)#CVSS:.* $1",
+]
+
 exclude_path = [
   ".*categories/index.html",
   ".*tags/index.html",
