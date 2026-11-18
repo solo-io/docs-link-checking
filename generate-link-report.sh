@@ -8,8 +8,9 @@
 # (e.g. version-switcher links) are excluded from the report. Broken links to a different
 # page, or within the same version, are always reported.
 #
-# Optional 4th arg: when set to "pr", the script diffs against origin/main to
-# find changed content/asset files and scopes results to only include:
+# Optional 4th arg: when set to "pr", the script finds the content/asset files
+# the pull request changes (see pr_changed_files) and scopes results to only
+# include:
 #   1. Broken links in files that were changed (source matches a changed file)
 #   2. Broken links to files that were changed (target matches a changed file)
 # Asset files are resolved to the content pages that reuse them via
@@ -27,10 +28,36 @@ PR_MODE="${4:-}"
 #   content/docs/foo/_index.md -> docs/foo/
 CHANGED_SLUGS=()
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# The files the pull request changes, or nothing (exit 1) when they cannot be
+# found.
+#
+# A pull_request checkout is GitHub's merge commit, whose first parent is the
+# base branch tip, so `HEAD^1 HEAD` is the pull request's diff with no fetch.
+# That comes first because `origin/main` usually does not exist here. The site
+# checkout fetches only the merge ref, and the `origin/main` in the job log
+# belongs to the docs-link-checking checkout. Until 2026-11-18 the diff below was
+# the only one, failed under `|| true`, left CHANGED_SLUGS empty, and an empty
+# list skips the scoping. Every pre-existing broken link in the product then
+# failed every pull request, on every site that calls this script.
+pr_changed_files() {
+  if git rev-parse --verify --quiet HEAD^2 >/dev/null; then
+    git diff --name-only HEAD^1 HEAD -- content/ assets/ && return 0
+  fi
+  local base="origin/${GITHUB_BASE_REF:-main}"
+  git diff --name-only "$base...HEAD" -- content/ assets/ 2>/dev/null && return 0
+  return 1
+}
+
 if [ -n "$PR_MODE" ]; then
   # Get changed content and asset files relative to the base branch
-  PR_CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- content/ assets/ 2>/dev/null \
-    | sort -u || true)
+  if ! PR_CHANGED_FILES=$(pr_changed_files | sort -u); then
+    PR_CHANGED_FILES=""
+  fi
+  if [ -z "$PR_CHANGED_FILES" ]; then
+    # Loud, not silent: an empty list reports every broken link in the product.
+    echo "::warning::generate-link-report.sh: could not list the files this pull request changes, so the report is NOT scoped to them. Broken links that are already on the base branch are included." >&2
+  fi
   # Resolve asset files to the content pages that reuse them
   CHANGED_CONTENT_FILES=$(echo "$PR_CHANGED_FILES" \
     | python3 "$SCRIPT_DIR/find-asset-users.py" --repo-root "$(git rev-parse --show-toplevel)" --content-only - 2>/dev/null || true)
@@ -66,11 +93,18 @@ looks_like_version() {
   return 1
 }
 
-# Returns 0 (match) if the given path contains any changed-file slug.
+# Returns 0 (match) if the given path IS a changed page: a source like
+# public/<slug>index.html, or a link target like file:///.../public/<slug>#frag.
+#
+# A whole-segment match, not a substring one. `*"$slug"*` let an edited
+# section `_index.md` (slug `istio/1.32.x/`) match every page under it, so
+# touching one landing page reported every broken link in the version.
 matches_changed_file() {
-  local path="$1"
+  local path="${1%%#*}"
+  path="${path%index.html}"
+  [[ "$path" == */ ]] || path="$path/"
   for slug in "${CHANGED_SLUGS[@]}"; do
-    [[ "$path" == *"$slug"* ]] && return 0
+    [[ "$path" == "$slug" || "$path" == */"$slug" ]] && return 0
   done
   return 1
 }
